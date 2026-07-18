@@ -203,6 +203,7 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output raw JSON")
     parser.add_argument("--language", default="zh", help="Whisper language hint (default: zh)")
     parser.add_argument("--model", default="small", help="Whisper model size: tiny/base/small/medium/large-v3 (default: small)")
+    parser.add_argument("--save-audio", default="", help="Save audio file to this path")
     args = parser.parse_args()
 
     # Extract BV ID
@@ -268,6 +269,12 @@ def main():
         try:
             print("Downloading audio stream...", file=sys.stderr)
             if download_audio(audio_url, audio_path, referer):
+                # Save audio if requested
+                if args.save_audio:
+                    import shutil
+                    shutil.copy2(audio_path, args.save_audio)
+                    print(f"Audio saved to: {args.save_audio}", file=sys.stderr)
+
                 subtitles = whisper_transcribe(audio_path, args.language, args.model)
                 if subtitles:
                     source = "whisper"
