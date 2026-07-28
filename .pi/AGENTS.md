@@ -11,7 +11,10 @@ B 站视频字幕提取 + Whisper 本地语音转录工具。支持 CC 字幕、
 ### 核心命令
 
 ```bash
-# 默认流程：下载 + 转录 + 保存（推荐）
+# 后台队列模式：自动排队，可同时提交多个（推荐）
+./bili_bg.sh "视频URL1" "视频URL2" ... [model]
+
+# 默认流程：下载 + 转录 + 保存（前台运行）
 ./bili_save.sh "视频URL" [model]
 
 # 快速查看（不保存文件）
@@ -21,15 +24,28 @@ B 站视频字幕提取 + Whisper 本地语音转录工具。支持 CC 字幕、
 python3 fetch_transcript.py "视频URL" [options]
 ```
 
+### 队列管理
+
+```bash
+# 查看队列状态（运行中/已完成/失败）
+./bili_bg.sh --status
+
+# 查看某个任务的详细日志
+./bili_bg.sh --log <task_id>
+
+# 从文件批量提交（每行一个URL）
+./bili_bg.sh urls.txt [model]
+```
+
 ### 输出目录结构
 
 ```
 ~/bilibili-output/
-├── audio/
-│   └── {BV号}_{标题前20字}.m4s          # 音频文件
-└── transcripts/
-    ├── {BV号}_{标题前20字}.txt           # 转录文稿
-    └── {BV号}_{标题前20字}_link.txt      # 视频链接信息
+├── {BV号}_{适配名字}/
+│   ├── 转录文稿.txt          # 原始转录文本
+│   └── 适配分析.md           # 内容分析总结
+├── audio/                    # 音频文件（旧格式）
+└── transcripts/              # 文稿文件（旧格式）
 ```
 
 ### 模型选择
@@ -54,15 +70,29 @@ python3 fetch_transcript.py "视频URL" [options]
 
 ## 常见操作
 
-### 下载并转录视频
+### 后台排队转录（推荐）
+
+```bash
+# 单个视频后台运行
+./bili_bg.sh "https://www.bilibili.com/video/BV1xxx"
+
+# 多个视频自动排队
+./bili_bg.sh "BV1xxx" "BV2xxx" "BV3xxx"
+
+# 从文件批量提交
+./bili_bg.sh urls.txt small
+
+# 查看队列状态
+./bili_bg.sh --status
+
+# 查看任务日志
+./bili_bg.sh --log BV1xxx_1234567890
+```
+
+### 下载并转录视频（前台）
 
 ```bash
 ./bili_save.sh "https://www.bilibili.com/video/BV1xxx"
-```
-
-### 指定模型
-
-```bash
 ./bili_save.sh "BV1xxx" tiny    # 快速
 ./bili_save.sh "BV1xxx" small   # 默认
 ./bili_save.sh "BV1xxx" medium  # 高质量
@@ -72,12 +102,7 @@ python3 fetch_transcript.py "视频URL" [options]
 
 ```bash
 ./bili.sh "BV1xxx"
-```
-
-### 带时间戳输出
-
-```bash
-./bili.sh "BV1xxx" --timestamps
+./bili.sh "BV1xxx" --timestamps  # 带时间戳
 ```
 
 ### JSON 格式输出
