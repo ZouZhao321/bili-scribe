@@ -1,6 +1,8 @@
-"""Bilibili Transcript — core transcription modules.
+"""Bilibili Transcript — 统一包结构。
 
-This package provides the core modules for fetching Bilibili video subtitles
-and transcripts. It supports CC subtitles, AI-generated subtitles, and Whisper
-local transcription as a fallback.
+src/
+├── core/    # 核心引擎 — faster-whisper 封装 + B 站 API 交互
+├── cli/     # 命令行入口
+├── shell/   # Shell 脚本
+└── web/     # FastAPI 服务
 """

@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from api.models import (
+from src.web.models import (
     OutputFormat,
     ProgressInfo,
     ProgressPhase,
@@ -17,7 +17,7 @@ from api.models import (
     TranscriptMode,
     WhisperModel,
 )
-from api.queue import Task, TaskQueue
+from src.web.queue import Task, TaskQueue
 
 
 # Default storage directory

@@ -6,7 +6,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.models import (
+from src.web.models import (
     OutputFormat,
     TaskListResponse,
     TaskProgress,
@@ -14,8 +14,8 @@ from api.models import (
     TaskSummary,
     WhisperModel,
 )
-from api.queue import queue
-from api.storage import storage
+from src.web.queue import queue
+from src.web.storage import storage
 
 router = APIRouter(tags=["tasks"])
 

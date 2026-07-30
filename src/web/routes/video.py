@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.fetch_transcript import (
+from src.core.transcriber import (
     api_get,
     extract_bvid,
     get_video_info,
@@ -12,7 +12,7 @@ from src.fetch_transcript import (
     get_subtitle_url,
 )
 
-from api.models import PageInfo, VideoInfoResponse
+from src.web.models import PageInfo, VideoInfoResponse
 
 router = APIRouter(tags=["video"])
 

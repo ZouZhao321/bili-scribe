@@ -145,7 +145,7 @@ for url in "${URLS[@]}"; do
 		echo "" >>"$LOG_FILE"
 
 		# 执行转录
-		"$SCRIPT_DIR/script/bili_save.sh" "$url" "$MODEL" >>"$LOG_FILE" 2>&1
+		"$SCRIPT_DIR/src/shell/bili_save.sh" "$url" "$MODEL" >>"$LOG_FILE" 2>&1
 		EXIT_CODE=$?
 
 		echo "" >>"$LOG_FILE"

@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from api.models import TaskStatus, ProgressPhase
-from api.queue import Task, TaskQueue
+from src.web.models import TaskStatus, ProgressPhase
+from src.web.queue import Task, TaskQueue
 
 
 class TestTask:

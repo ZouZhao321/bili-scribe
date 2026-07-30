@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from api.models import (
+from src.web.models import (
     OutputFormat,
     ProgressInfo,
     ProgressPhase,

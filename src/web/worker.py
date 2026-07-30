@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 # Import core transcription logic
-from src.fetch_transcript import (
+from src.core.transcriber import (
     HEADERS,
     api_get,
     extract_bvid,
@@ -27,15 +27,15 @@ from src.fetch_transcript import (
     format_timestamp,
 )
 
-from api.models import (
+from src.web.models import (
     OutputFormat,
     ProgressPhase,
     TranscriptMode,
     TranscriptSource,
     TaskStatus,
 )
-from api.queue import queue
-from api.storage import storage
+from src.web.queue import queue
+from src.web.storage import storage
 
 
 # Check interval in seconds

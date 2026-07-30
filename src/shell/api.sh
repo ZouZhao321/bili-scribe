@@ -15,7 +15,7 @@ if [ ! -f "$VENV_PYTHON" ]; then
 	VENV_PYTHON="python3"
 fi
 
-APP="api.server:app"
+APP="src.web.server:app"
 PORT="${API_PORT:-8000}"
 HOST="${API_HOST:-0.0.0.0}"
 PID_FILE="/tmp/bilibili-api.pid"

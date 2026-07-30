@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
+from src.web.queue import queue
+from src.web.storage import storage
 
 
 class TestHealthEndpoint:
@@ -124,8 +126,6 @@ class TestTranscribeEndpoint:
     def test_rate_limit_duplicate(self, api_client: TestClient):
         """Same BV should be rate limited if already pending."""
         # Remove any existing tasks first
-        from api.queue import queue
-        from api.storage import storage
         # Complete the existing task with this BV
         for task_id in list(queue._tasks.keys()):
             task = queue.peek(task_id)

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.fetch_transcript import (
+from src.core.transcriber import (
     extract_bvid,
     get_cid,
     get_video_info,
@@ -16,7 +16,7 @@ from src.fetch_transcript import (
     download_subtitle_json,
 )
 
-from api.models import (
+from src.web.models import (
     AudioInfo,
     ErrorResponse,
     OutputFormat,
@@ -35,9 +35,9 @@ from api.models import (
     UsageInfo,
     WhisperModel,
 )
-from api.queue import Task, queue
-from api.storage import storage
-from api.worker import worker
+from src.web.queue import Task, queue
+from src.web.storage import storage
+from src.web.worker import worker
 
 router = APIRouter(tags=["transcribe"])
 

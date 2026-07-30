@@ -2,6 +2,30 @@
 
 B 站视频字幕提取 + Whisper 本地语音转录工具。每次转录自动保存音频、文稿和视频链接。
 
+## 项目架构
+
+本项目按 **核心引擎 → 使用方式** 分层组织：
+
+```
+bilibili-transcript/
+├── core/          # 核心引擎 — faster-whisper 封装 + B 站 API 交互
+├── cli/           # 命令行入口
+├── shell/         # Shell 脚本（一键保存、后台队列、cron 调度）
+├── web/           # FastAPI 服务（HTTP API 远程调用）
+├── tests/         # 测试套件
+├── out/           # 输出目录
+├── docs/          # 设计文档
+├── fetch_transcript.py  # 兼容入口（委派到 cli/）
+└── pyproject.toml
+```
+
+| 层级 | 说明 |
+| ------ | ------ |
+| `core/` | faster-whisper 为核心的转录引擎，B 站 API 封装，三级降级策略 |
+| `cli/` | `python fetch_transcript.py` 的命令行入口，调用 core/ |
+| `shell/` | Shell 脚本，封装 CLI 实现一键保存、后台队列、cron 调度 |
+| `web/` | FastAPI 服务，提供 RESTful HTTP API，支持同步/异步模式 |
+
 ## 功能
 
 - 自动提取 B 站视频 CC/AI 字幕（秒出）
@@ -33,7 +57,7 @@ python3 fetch_transcript.py "URL" --text-only
 ### 完整流程（自动保存音频 + 文稿 + 链接）
 
 ```bash
-./bili_save.sh "URL" [model]
+./shell/bili_save.sh "URL" [model]
 ```
 
 输出目录 `~/bilibili-output/`：
@@ -50,9 +74,9 @@ bilibili-output/
 ### 模型选择
 
 ```bash
-./bili_save.sh "URL" tiny     # 最快，质量一般
-./bili_save.sh "URL" small    # 默认，推荐日常使用
-./bili_save.sh "URL" medium   # 更准，需要更多内存
+./shell/bili_save.sh "URL" tiny     # 最快，质量一般
+./shell/bili_save.sh "URL" small    # 默认，推荐日常使用
+./shell/bili_save.sh "URL" medium   # 更准，需要更多内存
 ```
 
 | 模型 | 大小 | 速度 | 质量 | 适用场景 |
@@ -124,16 +148,16 @@ pip install -r requirements-api.txt
 
 ```bash
 # 后台启动
-./api.sh start
+./shell/api.sh start
 
 # 查看状态
-./api.sh status
+./shell/api.sh status
 
 # 查看日志
-./api.sh logs
+./shell/api.sh logs
 
 # 停止服务
-./api.sh stop
+./shell/api.sh stop
 ```
 
 ### API 接口

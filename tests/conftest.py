@@ -23,7 +23,7 @@ def api_client() -> Generator[TestClient, None, None]:
     Yields:
         A TestClient instance for making HTTP requests to the API.
     """
-    from api.server import app
+    from src.web.server import app
     with TestClient(app) as client:
         yield client
 
@@ -48,7 +48,7 @@ def fresh_queue():
     Returns:
         A TaskQueue instance with max_size=10.
     """
-    from api.queue import TaskQueue
+    from src.web.queue import TaskQueue
     return TaskQueue(max_size=10)
 
 
@@ -59,8 +59,8 @@ def sample_task():
     Returns:
         A Task instance with known test values.
     """
-    from api.queue import Task
-    from api.models import TranscriptMode, WhisperModel, OutputFormat
+    from src.web.queue import Task
+    from src.web.models import TranscriptMode, WhisperModel, OutputFormat
     return Task(
         task_id="test_001",
         url="BV1Gm421W75K",

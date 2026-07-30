@@ -8,9 +8,9 @@ import urllib.request
 
 from fastapi import APIRouter
 
-from api.models import HealthCheckItem, HealthChecks, HealthResponse
-from api.queue import queue
-from api.worker import worker
+from src.web.models import HealthCheckItem, HealthChecks, HealthResponse
+from src.web.queue import queue
+from src.web.worker import worker
 
 router = APIRouter(tags=["health"])
 

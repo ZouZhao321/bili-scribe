@@ -6,9 +6,9 @@ import os
 
 import pytest
 
-from api.models import TaskStatus
-from api.queue import Task, TaskQueue
-from api.storage import TaskStorage
+from src.web.models import TaskStatus
+from src.web.queue import Task, TaskQueue
+from src.web.storage import TaskStorage
 
 
 class TestTaskStorage:
