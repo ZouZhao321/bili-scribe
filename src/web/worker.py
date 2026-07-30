@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 # Import core transcription logic
-from src.core.transcriber import (
+from src.core.bilibili import (
     HEADERS,
     api_get,
     extract_bvid,
@@ -23,6 +23,8 @@ from src.core.transcriber import (
     download_subtitle_json,
     get_audio_url,
     download_audio,
+)
+from src.core.transcriber import (
     whisper_transcribe,
     format_timestamp,
 )

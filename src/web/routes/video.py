@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.core.transcriber import (
+from src.core.bilibili import (
     api_get,
     extract_bvid,
     get_video_info,

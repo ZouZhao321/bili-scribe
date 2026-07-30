@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = ["faster-whisper>=1.0.0", "fastapi>=0.141.0", "uvicorn>=0.52.0"]
 
 [project.scripts]
-bili-transcript = "src.core.transcriber:main"
+bili-transcript = "src.core.main:main"
 
 [[tool.uv.index]]
 name = "tencentyun"
