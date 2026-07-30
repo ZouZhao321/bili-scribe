@@ -1,0 +1,22 @@
+[project]
+name = "bilibili-transcript"
+version = "1.0.0"
+description = "B站视频字幕提取 + Whisper 本地语音转录工具"
+requires-python = ">=3.10"
+dependencies = [
+    "faster-whisper>=1.0.0",
+    "fastapi>=0.141.0",
+    "uvicorn>=0.52.0",
+]
+
+[project.scripts]
+bili-transcript = "fetch_transcript:main"
+
+[[tool.uv.index]]
+name = "tencentyun"
+url = "http://mirrors.tencentyun.com/pypi/simple"
+default = true
+
+[tool.uv]
+index-url = "http://mirrors.tencentyun.com/pypi/simple"
+trusted-hosts = ["mirrors.tencentyun.com"]

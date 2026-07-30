@@ -45,7 +45,7 @@ CPU_THRESHOLD=50
 
 # 使用项目的 venv Python
 VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python3"
-TRANSCRIPT_SCRIPT="$SCRIPT_DIR/fetch_transcript.py"
+TRANSCRIPT_SCRIPT="$SCRIPT_DIR/src/fetch_transcript.py"
 SAVE_SCRIPT="$SCRIPT_DIR/bili_save.sh"
 
 # 如果 venv 不存在，回退到系统 Python

@@ -11,7 +11,7 @@ if [ ! -f "$VENV_PYTHON" ]; then
     VENV_PYTHON="python3"
 fi
 
-TRANSCRIPT_SCRIPT="$SCRIPT_DIR/fetch_transcript.py"
+TRANSCRIPT_SCRIPT="$SCRIPT_DIR/src/fetch_transcript.py"
 
 URL="$1"
 MODEL="${2:-small}"

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 # Import core transcription logic
-from fetch_transcript import (
+from src.fetch_transcript import (
     HEADERS,
     api_get,
     extract_bvid,

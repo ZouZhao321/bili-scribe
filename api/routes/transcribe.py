@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from fetch_transcript import (
+from src.fetch_transcript import (
     extract_bvid,
     get_cid,
     get_video_info,

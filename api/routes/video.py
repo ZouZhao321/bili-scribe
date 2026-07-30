@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from fetch_transcript import (
+from src.fetch_transcript import (
     api_get,
     extract_bvid,
     get_video_info,
