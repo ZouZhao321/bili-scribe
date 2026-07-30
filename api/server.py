@@ -1,6 +1,20 @@
 """Bilibili Transcript API — FastAPI application entry point."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
+from api.routes.health import router as health_router
+from api.worker import worker
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: start background worker. Shutdown: stop worker."""
+    worker.start()
+    yield
+    worker.stop()
+
 
 app = FastAPI(
     title="Bilibili Transcript API",
@@ -8,7 +22,11 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
+
+# Register routers
+app.include_router(health_router, prefix="/api/v1")
 
 
 @app.get("/")
