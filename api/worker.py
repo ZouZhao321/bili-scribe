@@ -30,6 +30,7 @@ from fetch_transcript import (
 from api.models import (
     OutputFormat,
     ProgressPhase,
+    TranscriptMode,
     TranscriptSource,
     TaskStatus,
 )
@@ -188,7 +189,7 @@ def process_task(task_id: str) -> None:
 
                 audio_size = os.path.getsize(audio_path)
 
-                _progress(task_id, ProgressPhase.loading_model, 60, f"正在加载 Whisper 模型 ({task.model})")
+                _progress(task_id, ProgressPhase.loading_model, 60, f"正在加载 Whisper 模型 ({task.model.value})")
 
                 whisper_result = whisper_transcribe(
                     audio_path,
