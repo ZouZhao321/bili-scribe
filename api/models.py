@@ -125,6 +125,7 @@ class TranscriptResult(BaseModel):
 
 
 class TranscribeResponse(BaseModel):
+
     task_id: str
     status: TaskStatus
     mode: str  # "sync" | "async"
@@ -132,7 +133,7 @@ class TranscribeResponse(BaseModel):
     result: Optional[TranscriptResult] = None
     audio: Optional[AudioInfo] = None
     usage: Optional[UsageInfo] = None
-    _links: Optional[dict[str, str]] = None
+    links: Optional[dict[str, str]] = None
 
 
 class TaskProgress(BaseModel):

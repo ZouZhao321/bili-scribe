@@ -234,7 +234,7 @@ async def submit_transcribe(req: TranscribeRequest):
             task_id=task_id,
             status=TaskStatus.pending,
             mode="async",
-            _links={"self": f"/api/v1/transcribe/{task_id}"},
+            links={"self": f"/api/v1/transcribe/{task_id}"},
         ).model_dump(mode="json"),
     )
 

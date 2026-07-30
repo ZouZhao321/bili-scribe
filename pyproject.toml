@@ -14,5 +14,6 @@ url = "http://mirrors.tencentyun.com/pypi/simple"
 default = true
 
 [tool.uv]
-index-url = "http://mirrors.tencentyun.com/pypi/simple"
-trusted-hosts = ["mirrors.tencentyun.com"]
+
+[dependency-groups]
+dev = ["pytest>=9.0", "httpx>=0.28"]
