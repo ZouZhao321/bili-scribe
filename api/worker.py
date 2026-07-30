@@ -250,39 +250,44 @@ def process_task(task_id: str) -> None:
 
 
 def _fire_webhook(task_id: str) -> None:
-    """Fire webhook callback for a completed/failed task."""
+    """Fire webhook callback for a completed/failed task. Retries up to 3 times."""
     task = queue.peek(task_id)
     if not task or not task.webhook:
         return
 
-    try:
-        payload = {
-            "event": f"transcription.{task.status.value}",
-            "task_id": task.task_id,
-            "status": task.status.value,
-        }
+    payload = {
+        "event": f"transcription.{task.status.value}",
+        "task_id": task.task_id,
+        "status": task.status.value,
+    }
 
-        if task.status == TaskStatus.completed:
-            payload["result"] = task.result
-            payload["usage"] = task.usage
-        elif task.status == TaskStatus.failed:
-            payload["error"] = task.error
-            payload["message"] = task.error
+    if task.status == TaskStatus.completed:
+        payload["result"] = task.result
+        payload["usage"] = task.usage
+    elif task.status == TaskStatus.failed:
+        payload["error"] = task.error
+        payload["message"] = task.error
 
-        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        req = urllib.request.Request(
-            task.webhook,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
-        # Non-blocking: short timeout
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            print(f"[worker] Webhook sent to {task.webhook}: {resp.status}", file=sys.stderr)
-
-    except Exception as e:
-        print(f"[worker] Webhook failed for {task_id}: {e}", file=sys.stderr)
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            req = urllib.request.Request(
+                task.webhook,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                print(f"[worker] Webhook sent to {task.webhook}: {resp.status}", file=sys.stderr)
+                return  # success
+        except Exception as e:
+            if attempt < max_retries:
+                print(f"[worker] Webhook attempt {attempt}/{max_retries} failed for {task_id}: {e}, retrying...", file=sys.stderr)
+                time.sleep(2 ** attempt)  # exponential backoff
+            else:
+                print(f"[worker] Webhook failed for {task_id} after {max_retries} attempts: {e}", file=sys.stderr)
 
 
 class Worker:
