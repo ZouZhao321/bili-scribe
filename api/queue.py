@@ -51,11 +51,23 @@ class Task:
     error: Optional[str] = None
 
     def elapsed_seconds(self) -> float:
-        """Seconds since task was created."""
+        """Calculate the time elapsed since the task was created.
+
+        Returns:
+            Number of seconds since creation.
+        """
         return (datetime.now(timezone.utc) - self.created_at).total_seconds()
 
     def is_stale(self, timeout: int = DEFAULT_TASK_TIMEOUT) -> bool:
-        """Check if a running task has exceeded the timeout."""
+        """Check if a running task has exceeded the allowed timeout.
+
+        Args:
+            timeout: Maximum allowed runtime in seconds before considering
+                the task stale. Defaults to DEFAULT_TASK_TIMEOUT (6 hours).
+
+        Returns:
+            True if the task is in processing state and has exceeded the timeout.
+        """
         if self.status != TaskStatus.processing or self.started_at is None:
             return False
         elapsed = (datetime.now(timezone.utc) - self.started_at).total_seconds()
@@ -74,7 +86,17 @@ class TaskQueue:
     # ── Core operations ──
 
     def enqueue(self, task: Task) -> bool:
-        """Add a task to the queue. Returns False if queue is full or duplicate."""
+        """Add a task to the queue.
+
+        Rejects the task if the queue is full or if a task with the
+        same BV ID is already pending or processing.
+
+        Args:
+            task: The Task instance to enqueue.
+
+        Returns:
+            True if the task was added, False if rejected.
+        """
         with self._lock:
             if len(self._tasks) >= self._max_size:
                 return False
@@ -91,7 +113,11 @@ class TaskQueue:
             return True
 
     def dequeue(self) -> Optional[Task]:
-        """Get the next pending task (FIFO) and mark it processing."""
+        """Retrieve the next pending task in FIFO order and mark it as processing.
+
+        Returns:
+            The next pending Task, or None if the queue is empty.
+        """
         with self._lock:
             for task_id, task in list(self._tasks.items()):
                 if task.status == TaskStatus.pending:
@@ -106,12 +132,28 @@ class TaskQueue:
             return None
 
     def peek(self, task_id: str) -> Optional[Task]:
-        """Get a task by ID without modifying it."""
+        """Get a task by ID without modifying its state.
+
+        Args:
+            task_id: The unique identifier of the task.
+
+        Returns:
+            The Task if found, or None.
+        """
         with self._lock:
             return self._tasks.get(task_id)
 
     def complete(self, task_id: str, result: dict, usage: dict) -> bool:
-        """Mark a task as completed with its result."""
+        """Mark a task as completed with its result and usage data.
+
+        Args:
+            task_id: The unique identifier of the task.
+            result: The transcription result dictionary.
+            usage: The usage statistics dictionary.
+
+        Returns:
+            True if the task was found and updated, False otherwise.
+        """
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
@@ -126,7 +168,15 @@ class TaskQueue:
             return True
 
     def fail(self, task_id: str, error: str) -> bool:
-        """Mark a task as failed with an error message."""
+        """Mark a task as failed with an error message.
+
+        Args:
+            task_id: The unique identifier of the task.
+            error: A human-readable error description.
+
+        Returns:
+            True if the task was found and updated, False otherwise.
+        """
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
@@ -142,7 +192,19 @@ class TaskQueue:
     def update_progress(self, task_id: str, phase: ProgressPhase, percent: int, message: str,
                         bytes_downloaded: int | None = None,
                         bytes_total: int | None = None) -> bool:
-        """Update progress for a running task."""
+        """Update the progress information for a running task.
+
+        Args:
+            task_id: The unique identifier of the task.
+            phase: The current progress phase.
+            percent: Progress percentage (0-100).
+            message: A human-readable progress message.
+            bytes_downloaded: Optional bytes downloaded so far.
+            bytes_total: Optional total bytes to download.
+
+        Returns:
+            True if the task was found and updated, False otherwise.
+        """
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
@@ -157,7 +219,17 @@ class TaskQueue:
 
     def list(self, status: str | None = None,
              limit: int = 20, offset: int = 0) -> tuple[list[Task], int]:
-        """List tasks with optional status filter and pagination. Returns (tasks, total)."""
+        """List tasks with optional status filter and pagination.
+
+        Args:
+            status: Optional status filter ('pending', 'processing',
+                'completed', 'failed'). Returns all statuses if None.
+            limit: Maximum number of tasks to return (default 20).
+            offset: Number of tasks to skip for pagination.
+
+        Returns:
+            A tuple of (list of Tasks, total count matching the filter).
+        """
         with self._lock:
             all_tasks = list(self._tasks.values())
 
@@ -172,7 +244,12 @@ class TaskQueue:
             return paginated, total
 
     def stats(self) -> dict[str, int]:
-        """Get queue statistics."""
+        """Get queue statistics by status.
+
+        Returns:
+            A dictionary with keys 'pending', 'processing', 'completed',
+            'failed' and their respective counts.
+        """
         with self._lock:
             counts = {"pending": 0, "processing": 0, "completed": 0, "failed": 0}
             for task in self._tasks.values():
@@ -182,7 +259,14 @@ class TaskQueue:
             return counts
 
     def remove(self, task_id: str) -> bool:
-        """Remove a task from the queue."""
+        """Remove a task from the queue by its ID.
+
+        Args:
+            task_id: The unique identifier of the task to remove.
+
+        Returns:
+            True if the task was found and removed, False otherwise.
+        """
         with self._lock:
             if task_id in self._tasks:
                 del self._tasks[task_id]
@@ -192,7 +276,14 @@ class TaskQueue:
     # ── Maintenance ──
 
     def detect_stale_tasks(self, timeout: int = DEFAULT_TASK_TIMEOUT) -> list[Task]:
-        """Find and return stale processing tasks."""
+        """Find and return all processing tasks that have exceeded the timeout.
+
+        Args:
+            timeout: Maximum allowed runtime in seconds.
+
+        Returns:
+            A list of stale Task instances.
+        """
         stale = []
         with self._lock:
             for task in self._tasks.values():
@@ -201,7 +292,11 @@ class TaskQueue:
         return stale
 
     def size(self) -> int:
-        """Get total number of tasks in the queue."""
+        """Get the total number of tasks currently in the queue.
+
+        Returns:
+            The number of tasks (across all statuses).
+        """
         with self._lock:
             return len(self._tasks)
 
@@ -209,7 +304,14 @@ class TaskQueue:
 
     @staticmethod
     def _extract_bvid(url: str) -> str | None:
-        """Extract BV ID from a URL."""
+        """Extract the BV ID from a Bilibili URL or bare ID string.
+
+        Args:
+            url: A Bilibili URL or BV ID string.
+
+        Returns:
+            The 12-character BV ID if found, or None.
+        """
         import re
         m = re.search(r"(BV[\w]{10})", url)
         return m.group(1) if m else None

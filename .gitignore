@@ -19,4 +19,4 @@ Thumbs.db
 .idea/
 
 # Output
-out/
+out/_read_out.py

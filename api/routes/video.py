@@ -18,7 +18,14 @@ router = APIRouter(tags=["video"])
 
 
 def _format_duration(seconds: int) -> str:
-    """Convert seconds to MM:SS or HH:MM:SS format."""
+    """Convert a duration in seconds to MM:SS or HH:MM:SS format.
+
+    Args:
+        seconds: Duration in seconds.
+
+    Returns:
+        Formatted duration string (e.g. "5:11" or "1:05:11").
+    """
     if seconds <= 0:
         return "0:00"
     h = seconds // 3600
@@ -31,7 +38,21 @@ def _format_duration(seconds: int) -> str:
 
 @router.get("/video/info", response_model=VideoInfoResponse)
 async def video_info(url: str = Query(..., description="B站视频链接或BV号")):
-    """Get video metadata without transcribing."""
+    """Get video metadata without transcribing.
+
+    Fetches video title, author, duration, cover, description, page list,
+    and subtitle availability from the Bilibili API.
+
+    Args:
+        url: Bilibili video URL, BV ID, or av number.
+
+    Returns:
+        VideoInfoResponse with all available metadata.
+
+    Raises:
+        HTTPException 400: If the URL is invalid.
+        HTTPException 404: If the video does not exist.
+    """
     try:
         bvid = extract_bvid(url)
     except SystemExit:

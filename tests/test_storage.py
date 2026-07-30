@@ -15,6 +15,7 @@ class TestTaskStorage:
     """Test TaskStorage operations."""
 
     def test_save_and_load(self, temp_storage_dir, sample_task):
+        """Save and load."""
         storage = TaskStorage(temp_storage_dir)
         storage.save(sample_task)
 
@@ -30,6 +31,7 @@ class TestTaskStorage:
         assert loaded.status == TaskStatus.pending
 
     def test_save_and_load_completed(self, temp_storage_dir, sample_task, sample_completed_result, sample_usage):
+        """Save and load completed."""
         storage = TaskStorage(temp_storage_dir)
 
         # Mark as completed and save
@@ -45,6 +47,7 @@ class TestTaskStorage:
         assert loaded.usage["source"] == "subtitle"
 
     def test_save_and_load_failed(self, temp_storage_dir, sample_task):
+        """Save and load failed."""
         storage = TaskStorage(temp_storage_dir)
 
         sample_task.status = TaskStatus.failed
@@ -56,10 +59,12 @@ class TestTaskStorage:
         assert loaded.error == "音频下载失败"
 
     def test_load_nonexistent(self, temp_storage_dir):
+        """Load nonexistent."""
         storage = TaskStorage(temp_storage_dir)
         assert storage.load("nonexistent") is None
 
     def test_delete(self, temp_storage_dir, sample_task):
+        """Delete."""
         storage = TaskStorage(temp_storage_dir)
         storage.save(sample_task)
 
@@ -68,6 +73,7 @@ class TestTaskStorage:
         assert storage.delete("nonexistent") is False
 
     def test_list_files(self, temp_storage_dir):
+        """List files."""
         storage = TaskStorage(temp_storage_dir)
 
         # Empty directory
@@ -85,12 +91,14 @@ class TestTaskStorage:
         assert "task_2" in files
 
     def test_recover_empty(self, temp_storage_dir):
+        """Recover empty."""
         storage = TaskStorage(temp_storage_dir)
         queue = TaskQueue()
         recovered = storage.recover(queue)
         assert recovered == 0
 
     def test_recover_pending_tasks(self, temp_storage_dir):
+        """Recover pending tasks."""
         storage = TaskStorage(temp_storage_dir)
         queue = TaskQueue()
 
@@ -107,6 +115,7 @@ class TestTaskStorage:
         assert t.status == TaskStatus.pending
 
     def test_recover_completed_tasks(self, temp_storage_dir):
+        """Recover completed tasks."""
         storage = TaskStorage(temp_storage_dir)
         queue = TaskQueue()
 

@@ -1,0 +1,1 @@
+"""API route handlers — FastAPI router modules."""

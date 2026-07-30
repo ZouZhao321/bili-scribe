@@ -13,7 +13,17 @@ from api.worker import worker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: start background worker. Shutdown: stop worker."""
+    """Manage the application lifecycle.
+
+    Starts the background transcription worker on startup and
+    performs a graceful shutdown on teardown.
+
+    Args:
+        app: The FastAPI application instance.
+
+    Yields:
+        None: The application runs while the context manager is active.
+    """
     worker.start()
     yield
     worker.stop()
@@ -37,4 +47,9 @@ app.include_router(tasks_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
+    """Root endpoint — returns service status.
+
+    Returns:
+        dict: Service name and status indicator.
+    """
     return {"status": "ok", "service": "bilibili-transcript-api"}

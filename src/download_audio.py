@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Download audio for each video in out/ without re-transcribing."""
+"""Download audio for each video in the out/ directory.
+
+Iterates over existing video directories under out/, extracts the BV ID,
+and downloads the audio stream for each video that does not already have
+an audio.m4s file. Intended for batch audio download without re-transcribing.
+"""
 
 import os, re, sys, json, time
 import urllib.request
@@ -12,19 +17,42 @@ HEADERS = {
 }
 
 def api_get(url: str) -> dict:
-    req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    """Send a GET request to the Bilibili API.
+
+    Args:
+        url: The API endpoint URL.
+
+    Returns:
+        Parsed JSON response as a dictionary.
+
+    Raises:
+        urllib.error.URLError: If the request fails.
+    """
 
 def get_cid(bvid: str) -> str:
-    """Get first page cid for a video."""
+    """Get the first page CID for a video.
+
+    Args:
+        bvid: The 12-character BV ID of the video.
+
+    Returns:
+        The CID string, or None if unavailable.
+    """
     data = api_get(f"https://api.bilibili.com/x/player/pagelist?bvid={bvid}")
     if data.get("code") == 0 and data.get("data"):
         return str(data["data"][0]["cid"])
     return None
 
 def get_audio_url(bvid: str, cid: str) -> str:
-    """Get audio stream URL."""
+    """Get the audio stream URL from the Bilibili playurl API.
+
+    Args:
+        bvid: The 12-character BV ID of the video.
+        cid: The CID of the video page.
+
+    Returns:
+        The audio stream base URL, or None if unavailable.
+    """
     data = api_get(f"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&fnval=16&qn=64")
     if data.get("code") != 0:
         return None
@@ -34,7 +62,15 @@ def get_audio_url(bvid: str, cid: str) -> str:
     return None
 
 def download_audio(url: str, output_path: str) -> bool:
-    """Download audio from URL."""
+    """Download an audio stream to a local file.
+
+    Args:
+        url: The audio stream URL.
+        output_path: Local filesystem path to save the audio.
+
+    Returns:
+        True if the download succeeded, False otherwise.
+    """
     req = urllib.request.Request(url, headers=HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=300) as resp:
@@ -54,6 +90,13 @@ def download_audio(url: str, output_path: str) -> bool:
         return False
 
 def main():
+    """Iterate over video directories and download missing audio files.
+
+    Scans the out/ directory for video subdirectories, extracts BV IDs
+    from directory names, and downloads audio.m4s for each video that
+    does not already have one. Includes a 1-second rate-limit delay
+    between requests.
+    """
     # Get all directories
     dirs = sorted([d for d in os.listdir(OUT_DIR) if os.path.isdir(os.path.join(OUT_DIR, d))])
     

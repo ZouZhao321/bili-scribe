@@ -34,32 +34,38 @@ class TestEnums:
     """Test enum values."""
 
     def test_transcript_mode_values(self):
+        """Transcript mode values."""
         assert TranscriptMode.auto.value == "auto"
         assert TranscriptMode.subtitle.value == "subtitle"
         assert TranscriptMode.whisper.value == "whisper"
         assert TranscriptMode.both.value == "both"
 
     def test_whisper_model_values(self):
+        """Whisper model values."""
         assert WhisperModel.tiny.value == "tiny"
         assert WhisperModel.small.value == "small"
         assert WhisperModel.large_v3.value == "large-v3"
 
     def test_task_status_values(self):
+        """Task status values."""
         assert TaskStatus.pending.value == "pending"
         assert TaskStatus.processing.value == "processing"
         assert TaskStatus.completed.value == "completed"
         assert TaskStatus.failed.value == "failed"
 
     def test_progress_phase_values(self):
+        """Progress phase values."""
         assert ProgressPhase.queued.value == "queued"
         assert ProgressPhase.transcribing.value == "transcribing"
 
     def test_output_format_values(self):
+        """Output format values."""
         assert OutputFormat.text.value == "text"
         assert OutputFormat.timestamps.value == "timestamps"
         assert OutputFormat.json.value == "json"
 
     def test_transcript_source_values(self):
+        """Transcript source values."""
         assert TranscriptSource.subtitle.value == "subtitle"
         assert TranscriptSource.whisper.value == "whisper"
 
@@ -68,6 +74,7 @@ class TestTranscribeRequest:
     """Test TranscribeRequest model."""
 
     def test_default_values(self):
+        """Default values."""
         req = TranscribeRequest(url="BV1Gm421W75K")
         assert req.url == "BV1Gm421W75K"
         assert req.mode == TranscriptMode.auto
@@ -79,6 +86,7 @@ class TestTranscribeRequest:
         assert req.webhook == ""
 
     def test_all_fields_set(self):
+        """All fields set."""
         req = TranscribeRequest(
             url="https://www.bilibili.com/video/BV1Gm421W75K",
             mode="whisper",
@@ -98,26 +106,32 @@ class TestTranscribeRequest:
         assert req.webhook == "https://example.com/callback"
 
     def test_url_trimmed(self):
+        """Url trimmed."""
         req = TranscribeRequest(url="  BV1Gm421W75K  ")
         assert req.url == "BV1Gm421W75K"
 
     def test_empty_url_raises(self):
+        """Empty url raises."""
         with pytest.raises(ValidationError):
             TranscribeRequest(url="")
 
     def test_invalid_model_raises(self):
+        """Invalid model raises."""
         with pytest.raises(ValidationError):
             TranscribeRequest(url="BV1xxx", model="invalid_model")
 
     def test_invalid_mode_raises(self):
+        """Invalid mode raises."""
         with pytest.raises(ValidationError):
             TranscribeRequest(url="BV1xxx", mode="invalid_mode")
 
     def test_invalid_page_negative(self):
+        """Invalid page negative."""
         with pytest.raises(ValidationError):
             TranscribeRequest(url="BV1xxx", page=-1)
 
     def test_serialize_deserialize(self):
+        """Serialize deserialize."""
         req = TranscribeRequest(url="BV1Gm421W75K", mode="whisper", model="tiny")
         data = req.model_dump(mode="json")
         assert data["url"] == "BV1Gm421W75K"
@@ -134,6 +148,7 @@ class TestTranscriptResult:
     """Test TranscriptResult model."""
 
     def test_minimal(self):
+        """Minimal."""
         result = TranscriptResult(
             bvid="BV1xxx",
             title="Test",
@@ -146,6 +161,7 @@ class TestTranscriptResult:
         assert result.subtitles == []
 
     def test_with_subtitles(self):
+        """With subtitles."""
         result = TranscriptResult(
             bvid="BV1xxx",
             title="Test",
@@ -177,6 +193,7 @@ class TestSubtitleEntry:
         assert "from_" not in data
 
     def test_deserialize_from_json(self):
+        """Deserialize from json."""
         data = {"from": 2.0, "to": 6.0, "content": "hello"}
         entry = SubtitleEntry(**data)
         assert entry.from_ == 2.0
@@ -187,6 +204,7 @@ class TestTranscribeResponse:
     """Test TranscribeResponse model."""
 
     def test_sync_response(self):
+        """Sync response."""
         resp = TranscribeResponse(
             task_id="test_001",
             status="completed",
@@ -197,6 +215,7 @@ class TestTranscribeResponse:
         assert resp.mode == "sync"
 
     def test_async_response(self):
+        """Async response."""
         resp = TranscribeResponse(
             task_id="test_002",
             status="pending",
@@ -211,6 +230,7 @@ class TestTaskStatusResponse:
     """Test TaskStatusResponse model."""
 
     def test_processing(self):
+        """Processing."""
         resp = TaskStatusResponse(
             task_id="test_001",
             status="processing",
@@ -234,6 +254,7 @@ class TestTaskStatusResponse:
         assert resp.result.entries == 3
 
     def test_failed(self):
+        """Failed."""
         resp = TaskStatusResponse(
             task_id="test_001",
             status="failed",
@@ -246,6 +267,7 @@ class TestHealthResponse:
     """Test HealthResponse model."""
 
     def test_ok(self):
+        """Ok."""
         resp = HealthResponse(
             status="ok",
             queue={"pending": 0, "running": 0, "completed": 5, "failed": 0},
@@ -254,6 +276,7 @@ class TestHealthResponse:
         assert resp.queue["completed"] == 5
 
     def test_default_models(self):
+        """Default models."""
         resp = HealthResponse(status="ok", queue={})
         assert "tiny" in resp.whisper_models
         assert resp.default_model == "small"
@@ -263,12 +286,14 @@ class TestVideoInfoResponse:
     """Test VideoInfoResponse model."""
 
     def test_minimal(self):
+        """Minimal."""
         info = VideoInfoResponse(bvid="BV1xxx", title="Test")
         assert info.bvid == "BV1xxx"
         assert info.total_pages == 1
         assert info.author == ""
 
     def test_with_pages(self):
+        """With pages."""
         from api.models import PageInfo
         info = VideoInfoResponse(
             bvid="BV1xxx",
@@ -288,11 +313,13 @@ class TestErrorResponse:
     """Test ErrorResponse model."""
 
     def test_minimal(self):
+        """Minimal."""
         err = ErrorResponse(error="invalid_url", message="无法解析 URL")
         assert err.error == "invalid_url"
         assert err.details is None
 
     def test_with_details(self):
+        """With details."""
         err = ErrorResponse(error="validation_error", message="参数错误", details={"field": "url"})
         assert err.details == {"field": "url"}
 
@@ -301,11 +328,13 @@ class TestTaskListResponse:
     """Test TaskListResponse model."""
 
     def test_empty(self):
+        """Empty."""
         resp = TaskListResponse(total=0, limit=20, offset=0, tasks=[])
         assert resp.total == 0
         assert len(resp.tasks) == 0
 
     def test_with_tasks(self):
+        """With tasks."""
         from api.models import TaskSummary
         task = TaskSummary(
             task_id="test_001",
@@ -323,20 +352,24 @@ class TestSubModels:
     """Test smaller sub-models."""
 
     def test_usage_info(self):
+        """Usage info."""
         usage = UsageInfo(source="whisper", model="small", duration_seconds=930.5)
         assert usage.source == TranscriptSource.whisper
         assert usage.real_time_factor is None
 
     def test_usage_info_with_rtf(self):
+        """Usage info with rtf."""
         usage = UsageInfo(source="whisper", model="small", duration_seconds=930.5,
                           audio_duration=3600, real_time_factor=0.26)
         assert usage.real_time_factor == 0.26
 
     def test_audio_info(self):
+        """Audio info."""
         audio = AudioInfo(size_bytes=6291456, duration_seconds=1530)
         assert audio.size_bytes == 6291456
 
     def test_progress_info(self):
+        """Progress info."""
         prog = ProgressInfo(phase="downloading_audio", percent=50, message="下载中",
                             bytes_downloaded=1000, bytes_total=2000)
         assert prog.bytes_downloaded == 1000
@@ -347,6 +380,7 @@ class TestSerialization:
     """Test JSON serialization round-trips."""
 
     def test_transcribe_request_json(self):
+        """Transcribe request json."""
         req = TranscribeRequest(url="BV1Gm421W75K", mode="whisper", model="tiny")
         data = req.model_dump(mode="json")
         json_str = json.dumps(data, ensure_ascii=False)
@@ -356,6 +390,7 @@ class TestSerialization:
         assert req2.mode == req.mode
 
     def test_health_response_json(self):
+        """Health response json."""
         resp = HealthResponse(status="ok", queue={"pending": 1})
         data = resp.model_dump(mode="json")
         json_str = json.dumps(data, ensure_ascii=False)

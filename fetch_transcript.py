@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper — delegates to src/fetch_transcript.py."""
+"""Compatibility wrapper — delegates to src/fetch_transcript.py.
+
+This file exists at the project root so that existing scripts and
+workflows referencing `python3 fetch_transcript.py` continue to work
+after the module was moved into the src/ package.
+"""
 import sys
 import os
 

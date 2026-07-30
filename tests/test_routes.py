@@ -11,6 +11,7 @@ class TestHealthEndpoint:
     """Tests for GET /api/v1/health."""
 
     def test_health_returns_200(self, api_client: TestClient):
+        """Health returns 200."""
         resp = api_client.get("/api/v1/health")
         assert resp.status_code == 200
         data = resp.json()
@@ -21,6 +22,7 @@ class TestHealthEndpoint:
         assert data["checks"]["queue_worker"]["status"] == "ok"
 
     def test_health_has_queue_stats(self, api_client: TestClient):
+        """Health has queue stats."""
         resp = api_client.get("/api/v1/health")
         data = resp.json()
         assert "pending" in data["queue"]
@@ -29,6 +31,7 @@ class TestHealthEndpoint:
         assert "failed" in data["queue"]
 
     def test_health_has_whisper_models(self, api_client: TestClient):
+        """Health has whisper models."""
         resp = api_client.get("/api/v1/health")
         data = resp.json()
         assert "tiny" in data["whisper_models"]
@@ -36,6 +39,7 @@ class TestHealthEndpoint:
         assert data["default_model"] == "small"
 
     def test_health_uptime(self, api_client: TestClient):
+        """Health uptime."""
         resp = api_client.get("/api/v1/health")
         data = resp.json()
         assert data["uptime"] > 0
@@ -45,12 +49,14 @@ class TestVideoInfoEndpoint:
     """Tests for GET /api/v1/video/info."""
 
     def test_invalid_url_returns_400(self, api_client: TestClient):
+        """Invalid url returns 400."""
         resp = api_client.get("/api/v1/video/info", params={"url": "invalid"})
         assert resp.status_code == 400
         data = resp.json()
         assert "invalid_url" in str(data["detail"])
 
     def test_missing_url_param_returns_422(self, api_client: TestClient):
+        """Missing url param returns 422."""
         resp = api_client.get("/api/v1/video/info")
         assert resp.status_code == 422
 
@@ -76,6 +82,7 @@ class TestTranscribeEndpoint:
     BV_ASYNC = "BV1Gm421W75K"  # video without subtitles, for async tests
 
     def test_invalid_url_returns_400(self, api_client: TestClient):
+        """Invalid url returns 400."""
         resp = api_client.post(
             "/api/v1/transcribe",
             json={"url": "invalid"},
@@ -85,6 +92,7 @@ class TestTranscribeEndpoint:
         assert "invalid_url" in str(data["detail"])
 
     def test_missing_url_returns_422(self, api_client: TestClient):
+        """Missing url returns 422."""
         resp = api_client.post("/api/v1/transcribe", json={})
         assert resp.status_code == 422
 
@@ -157,6 +165,7 @@ class TestTaskStatusEndpoint:
     """Tests for GET /api/v1/transcribe/:task_id."""
 
     def test_nonexistent_task_returns_404(self, api_client: TestClient):
+        """Nonexistent task returns 404."""
         resp = api_client.get("/api/v1/transcribe/nonexistent_task_id")
         assert resp.status_code == 404
         data = resp.json()
@@ -203,6 +212,7 @@ class TestTaskListEndpoint:
     """Tests for GET /api/v1/tasks."""
 
     def test_list_returns_200(self, api_client: TestClient):
+        """List returns 200."""
         resp = api_client.get("/api/v1/tasks")
         assert resp.status_code == 200
         data = resp.json()
@@ -212,6 +222,7 @@ class TestTaskListEndpoint:
         assert "tasks" in data
 
     def test_list_pagination_params(self, api_client: TestClient):
+        """List pagination params."""
         resp = api_client.get("/api/v1/tasks", params={"limit": 5, "offset": 0})
         assert resp.status_code == 200
         data = resp.json()
@@ -219,6 +230,7 @@ class TestTaskListEndpoint:
         assert data["offset"] == 0
 
     def test_list_status_filter(self, api_client: TestClient):
+        """List status filter."""
         resp = api_client.get("/api/v1/tasks", params={"status": "pending"})
         assert resp.status_code == 200
         data = resp.json()
@@ -240,6 +252,7 @@ class TestRootEndpoint:
     """Tests for GET /."""
 
     def test_root_returns_200(self, api_client: TestClient):
+        """Root returns 200."""
         resp = api_client.get("/")
         assert resp.status_code == 200
         data = resp.json()
@@ -251,10 +264,12 @@ class TestOpenAPI:
     """Tests for OpenAPI docs."""
 
     def test_docs_accessible(self, api_client: TestClient):
+        """Docs accessible."""
         resp = api_client.get("/docs")
         assert resp.status_code == 200
 
     def test_openapi_json(self, api_client: TestClient):
+        """Openapi json."""
         resp = api_client.get("/openapi.json")
         assert resp.status_code == 200
         data = resp.json()

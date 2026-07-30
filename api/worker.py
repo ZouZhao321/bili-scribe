@@ -44,7 +44,16 @@ POLL_INTERVAL = 2.0
 
 def _progress(task_id: str, phase: ProgressPhase, percent: int, message: str,
               bytes_dl: int | None = None, bytes_total: int | None = None) -> None:
-    """Helper to update progress and persist."""
+    """Update task progress and persist to disk.
+
+    Args:
+        task_id: The unique identifier of the task.
+        phase: The current progress phase.
+        percent: Progress percentage (0-100).
+        message: A human-readable progress message.
+        bytes_dl: Optional bytes downloaded so far.
+        bytes_total: Optional total bytes to download.
+    """
     queue.update_progress(task_id, phase, percent, message, bytes_dl, bytes_total)
     task = queue.peek(task_id)
     if task:
@@ -54,7 +63,21 @@ def _progress(task_id: str, phase: ProgressPhase, percent: int, message: str,
 def _build_result(bvid: str, title: str, author: str, duration: int,
                   source: TranscriptSource, subtitles: list[dict],
                   total_pages: int, page: int) -> dict:
-    """Build a standardized result dict from subtitles."""
+    """Build a standardized transcription result dictionary.
+
+    Args:
+        bvid: The video BV ID.
+        title: The video title.
+        author: The video author/uploader.
+        duration: Video duration in seconds.
+        source: The transcript source (subtitle or whisper).
+        subtitles: List of subtitle segment dicts.
+        total_pages: Total number of video pages/parts.
+        page: The current page number.
+
+    Returns:
+        A dictionary with all transcription result fields.
+    """
     entries = len(subtitles)
 
     if source == TranscriptSource.subtitle:
@@ -78,7 +101,17 @@ def _build_result(bvid: str, title: str, author: str, duration: int,
 
 def _build_usage(source: TranscriptSource, model: str, elapsed: float,
                  audio_duration: int | None = None) -> dict:
-    """Build a standardized usage dict."""
+    """Build a standardized usage statistics dictionary.
+
+    Args:
+        source: The transcript source.
+        model: The Whisper model name (empty for subtitle source).
+        elapsed: Wall-clock time spent on transcription in seconds.
+        audio_duration: Optional audio duration for real-time factor calculation.
+
+    Returns:
+        A dictionary with usage statistics.
+    """
     info = {
         "source": source.value,
         "model": model if source == TranscriptSource.whisper else "",
@@ -91,7 +124,15 @@ def _build_usage(source: TranscriptSource, model: str, elapsed: float,
 
 
 def _format_subtitles(subtitles: list[dict], fmt: OutputFormat) -> list[dict]:
-    """Format subtitles according to the requested output format."""
+    """Format subtitle segments according to the requested output format.
+
+    Args:
+        subtitles: Raw subtitle segment list from the transcription engine.
+        fmt: The target output format.
+
+    Returns:
+        A list of formatted subtitle dicts with 'from', 'to', and 'content' keys.
+    """
     if fmt == OutputFormat.json:
         # Return raw subtitles with both from/to and content
         return [
@@ -111,7 +152,18 @@ def _format_subtitles(subtitles: list[dict], fmt: OutputFormat) -> list[dict]:
 
 
 def process_task(task_id: str) -> None:
-    """Execute a single transcription task. Called by the worker thread."""
+    """Execute a single transcription task end-to-end.
+
+    Implements the three-tier fallback strategy:
+    1. CC subtitles (instant)
+    2. AI subtitles (instant)
+    3. Whisper local transcription (CPU, slower)
+
+    Updates progress through each phase and persists results on completion.
+
+    Args:
+        task_id: The unique identifier of the task to process.
+    """
     task = queue.peek(task_id)
     if task is None:
         return
@@ -250,7 +302,14 @@ def process_task(task_id: str) -> None:
 
 
 def _fire_webhook(task_id: str) -> None:
-    """Fire webhook callback for a completed/failed task. Retries up to 3 times."""
+    """Send a webhook callback for a completed or failed task.
+
+    Retries up to 3 times with exponential backoff (2s, 4s, 8s).
+    The callback payload includes the transcription result or error.
+
+    Args:
+        task_id: The unique identifier of the completed/failed task.
+    """
     task = queue.peek(task_id)
     if not task or not task.webhook:
         return
@@ -297,11 +356,16 @@ class Worker:
     """
 
     def __init__(self):
+        """Initialize the worker with no running thread."""
         self._thread: Optional[threading.Thread] = None
         self._running = False
 
     def start(self) -> None:
-        """Start the worker thread."""
+        """Start the background worker thread.
+
+        Starts a single daemon thread that polls the queue for pending
+        tasks. Safe to call multiple times — subsequent calls are no-ops.
+        """
         if self._running:
             return
         self._running = True
@@ -310,16 +374,28 @@ class Worker:
         print("[worker] Started", file=sys.stderr)
 
     def stop(self) -> None:
-        """Signal the worker to stop."""
+        """Signal the worker to stop after completing the current task.
+
+        Sets the running flag to False; the worker loop will exit at
+        the next iteration.
+        """
         self._running = False
         print("[worker] Stopping...", file=sys.stderr)
 
     @property
     def is_running(self) -> bool:
+        """Check whether the worker thread is currently active."""
         return self._running
 
     def _run(self) -> None:
-        """Main worker loop."""
+        """Main worker loop — polls the queue and processes tasks.
+
+        Runs indefinitely until stop() is called. At each iteration:
+        1. Detects and fails stale tasks.
+        2. Dequeues the next pending task.
+        3. Processes it via process_task().
+        4. Fires the webhook callback if configured.
+        """
         while self._running:
             try:
                 # Check for stale tasks

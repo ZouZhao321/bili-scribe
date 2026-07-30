@@ -14,6 +14,7 @@ class TestTask:
     """Test Task dataclass."""
 
     def test_default_values(self, sample_task):
+        """Default values."""
         assert sample_task.status == TaskStatus.pending
         assert sample_task.progress.phase == ProgressPhase.queued
         assert sample_task.progress.percent == 0
@@ -24,6 +25,7 @@ class TestTask:
         assert sample_task.error is None
 
     def test_is_stale(self, sample_task):
+        """Is stale."""
         assert sample_task.is_stale() is False  # not processing
 
         sample_task.status = TaskStatus.processing
@@ -36,6 +38,7 @@ class TestTask:
         assert sample_task.is_stale(timeout=0) is True  # should be stale
 
     def test_elapsed_seconds(self, sample_task):
+        """Elapsed seconds."""
         elapsed = sample_task.elapsed_seconds()
         assert elapsed >= 0
 
@@ -44,6 +47,7 @@ class TestTaskQueue:
     """Test TaskQueue operations."""
 
     def test_enqueue_dequeue(self, fresh_queue, sample_task):
+        """Enqueue dequeue."""
         assert fresh_queue.enqueue(sample_task) is True
         assert fresh_queue.size() == 1
 
@@ -57,6 +61,7 @@ class TestTaskQueue:
         assert fresh_queue.dequeue() is None
 
     def test_peek(self, fresh_queue, sample_task):
+        """Peek."""
         fresh_queue.enqueue(sample_task)
         task = fresh_queue.peek("test_001")
         assert task is not None
@@ -66,6 +71,7 @@ class TestTaskQueue:
         assert fresh_queue.peek("nonexistent") is None
 
     def test_complete(self, fresh_queue, sample_task):
+        """Complete."""
         fresh_queue.enqueue(sample_task)
         fresh_queue.dequeue()  # mark as processing
 
@@ -82,6 +88,7 @@ class TestTaskQueue:
         assert fresh_queue.complete("nonexistent", {}, {}) is False
 
     def test_fail(self, fresh_queue, sample_task):
+        """Fail."""
         fresh_queue.enqueue(sample_task)
         fresh_queue.dequeue()
 
@@ -95,6 +102,7 @@ class TestTaskQueue:
         assert fresh_queue.fail("nonexistent", "err") is False
 
     def test_update_progress(self, fresh_queue, sample_task):
+        """Update progress."""
         fresh_queue.enqueue(sample_task)
         fresh_queue.dequeue()
 
@@ -122,6 +130,7 @@ class TestTaskQueue:
         assert task.result["bvid"] == "BV1xxx"
 
     def test_stats(self, fresh_queue, sample_task):
+        """Stats."""
         assert fresh_queue.stats() == {"pending": 0, "processing": 0, "completed": 0, "failed": 0}
 
         fresh_queue.enqueue(sample_task)
@@ -134,11 +143,13 @@ class TestTaskQueue:
         assert fresh_queue.stats() == {"pending": 0, "processing": 0, "completed": 1, "failed": 0}
 
     def test_remove(self, fresh_queue, sample_task):
+        """Remove."""
         fresh_queue.enqueue(sample_task)
         assert fresh_queue.remove("test_001") is True
         assert fresh_queue.remove("test_001") is False  # already removed
 
     def test_max_size(self, sample_task):
+        """Max size."""
         q = TaskQueue(max_size=2)
         # Create 3 tasks
         t1 = Task(task_id="t1", url="BV1aaa", mode="auto", model="small")
@@ -171,11 +182,13 @@ class TestTaskQueue:
         assert fresh_queue.enqueue(t2) is True
 
     def test_list_empty(self, fresh_queue):
+        """List empty."""
         tasks, total = fresh_queue.list()
         assert tasks == []
         assert total == 0
 
     def test_list_with_tasks(self, fresh_queue):
+        """List with tasks."""
         t1 = Task(task_id="t1", url="BV1aaa", mode="auto", model="small")
         t2 = Task(task_id="t2", url="BV1bbb", mode="auto", model="small")
         fresh_queue.enqueue(t1)
@@ -188,6 +201,7 @@ class TestTaskQueue:
         assert tasks[0].task_id == "t2"
 
     def test_list_with_status_filter(self, fresh_queue):
+        """List with status filter."""
         t1 = Task(task_id="t1", url="BV1aaa", mode="auto", model="small")
         t2 = Task(task_id="t2", url="BV1bbb", mode="auto", model="small")
         fresh_queue.enqueue(t1)
@@ -206,6 +220,7 @@ class TestTaskQueue:
         assert tasks[0].task_id == "t2"
 
     def test_list_pagination(self, fresh_queue):
+        """List pagination."""
         for i in range(5):
             t = Task(task_id=f"t{i}", url=f"BV1{i:03d}", mode="auto", model="small")
             fresh_queue.enqueue(t)
@@ -226,6 +241,7 @@ class TestTaskQueue:
         assert len(tasks) == 0
 
     def test_detect_stale_tasks(self, fresh_queue, sample_task):
+        """Detect stale tasks."""
         fresh_queue.enqueue(sample_task)
         fresh_queue.dequeue()  # marks as processing with started_at
 
@@ -241,6 +257,7 @@ class TestTaskQueue:
         assert len(stale) == 1  # still only t1 (t2 is pending, not processing)
 
     def test_extract_bvid(self):
+        """Extract bvid."""
         assert TaskQueue._extract_bvid("BV1Gm421W75K") == "BV1Gm421W75K"
         assert TaskQueue._extract_bvid("https://www.bilibili.com/video/BV1Gm421W75K") == "BV1Gm421W75K"
         assert TaskQueue._extract_bvid("https://b23.tv/xxxxx") is None

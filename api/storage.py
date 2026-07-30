@@ -25,7 +25,18 @@ DEFAULT_STORAGE_DIR = os.path.expanduser("~/.bilibili-api/tasks")
 
 
 def _serialize_task(task: Task) -> dict:
-    """Serialize a Task to a JSON-serializable dict."""
+    """Serialize a Task instance to a JSON-serializable dictionary.
+
+    Converts all enum fields to their string values and datetime fields
+    to ISO-format strings. Handles both enum instances and raw string
+    values for robustness during recovery.
+
+    Args:
+        task: The Task instance to serialize.
+
+    Returns:
+        A dictionary suitable for JSON serialization.
+    """
     return {
         "task_id": task.task_id,
         "url": task.url,
@@ -54,7 +65,18 @@ def _serialize_task(task: Task) -> dict:
 
 
 def _deserialize_task(data: dict) -> Task:
-    """Deserialize a dict back to a Task."""
+    """Deserialize a dictionary back into a Task instance.
+
+    Handles ISO-format datetime strings, string enum values, and
+    nested progress information. Falls back to sensible defaults
+    for missing optional fields.
+
+    Args:
+        data: A dictionary representing a serialized task.
+
+    Returns:
+        A reconstructed Task instance.
+    """
     progress_data = data.get("progress", {})
     progress = ProgressInfo(
         phase=progress_data.get("phase", "queued"),
@@ -65,6 +87,14 @@ def _deserialize_task(data: dict) -> Task:
     )
 
     def _parse_dt(val):
+        """Parse a datetime from an ISO-format string or return as-is.
+
+        Args:
+            val: A datetime instance, ISO-format string, or None.
+
+        Returns:
+            A datetime instance if parsing succeeded, or None.
+        """
         if isinstance(val, datetime):
             return val
         if isinstance(val, str):
@@ -108,14 +138,21 @@ class TaskStorage:
 
     @property
     def dir(self) -> str:
+        """Get the storage directory path."""
         return self._dir
 
     def ensure_dir(self) -> None:
-        """Create the storage directory if it doesn't exist."""
+        """Create the storage directory (and parents) if it does not exist."""
         Path(self._dir).mkdir(parents=True, exist_ok=True)
 
     def save(self, task: Task) -> None:
-        """Save a single task to disk."""
+        """Persist a single task to disk as a JSON file.
+
+        The file is written to <storage_dir>/<task_id>.json.
+
+        Args:
+            task: The Task instance to save.
+        """
         self.ensure_dir()
         filepath = os.path.join(self._dir, f"{task.task_id}.json")
         data = _serialize_task(task)
@@ -127,7 +164,14 @@ class TaskStorage:
                 print(f"[storage] Failed to save task {task.task_id}: {e}", file=__import__('sys').stderr)
 
     def load(self, task_id: str) -> Optional[Task]:
-        """Load a single task from disk by ID."""
+        """Load a single task from disk by its ID.
+
+        Args:
+            task_id: The unique identifier of the task.
+
+        Returns:
+            The deserialized Task if found, or None.
+        """
         filepath = os.path.join(self._dir, f"{task_id}.json")
         if not os.path.exists(filepath):
             return None
@@ -140,7 +184,15 @@ class TaskStorage:
                 return None
 
     def delete(self, task_id: str) -> bool:
-        """Delete a task file from disk."""
+        """Delete a task file from disk.
+
+        Args:
+            task_id: The unique identifier of the task to delete.
+
+        Returns:
+            True if the file was deleted, False if it did not exist
+            or deletion failed.
+        """
         filepath = os.path.join(self._dir, f"{task_id}.json")
         try:
             if os.path.exists(filepath):
@@ -154,10 +206,15 @@ class TaskStorage:
     def recover(self, queue: TaskQueue) -> int:
         """Load all saved tasks from disk and restore them into the queue.
 
-        Completed/failed tasks are loaded for querying.
+        Completed and failed tasks are loaded for querying.
         Pending tasks are re-queued.
-        Processing tasks are reset to pending (safe recovery).
-        Returns the number of tasks recovered.
+        Processing tasks are reset to pending for safe recovery.
+
+        Args:
+            queue: The TaskQueue instance to restore tasks into.
+
+        Returns:
+            The number of tasks recovered from disk.
         """
         self.ensure_dir()
         recovered = 0
@@ -197,7 +254,11 @@ class TaskStorage:
         return recovered
 
     def list_files(self) -> list[str]:
-        """List all task IDs on disk."""
+        """List all task IDs that have been persisted to disk.
+
+        Returns:
+            A sorted list of task ID strings.
+        """
         self.ensure_dir()
         tasks = []
         try:

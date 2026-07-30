@@ -26,7 +26,16 @@ async def list_tasks(
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
     offset: int = Query(0, ge=0, description="分页偏移"),
 ):
-    """List all transcription tasks with optional status filter and pagination."""
+    """List all transcription tasks with optional status filter and pagination.
+
+    Args:
+        status: Optional filter by task status.
+        limit: Maximum number of tasks per page (1-100).
+        offset: Number of tasks to skip for pagination.
+
+    Returns:
+        TaskListResponse with total count and task summaries.
+    """
     tasks, total = queue.list(status=status, limit=limit, offset=offset)
 
     summaries = []

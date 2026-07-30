@@ -18,7 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 @pytest.fixture
 def api_client() -> Generator[TestClient, None, None]:
-    """Create a TestClient for the FastAPI app."""
+    """Create a TestClient bound to the FastAPI application.
+
+    Yields:
+        A TestClient instance for making HTTP requests to the API.
+    """
     from api.server import app
     with TestClient(app) as client:
         yield client
@@ -26,21 +30,35 @@ def api_client() -> Generator[TestClient, None, None]:
 
 @pytest.fixture
 def temp_storage_dir() -> Generator[str, None, None]:
-    """Create a temporary directory for task storage."""
+    """Create a temporary directory for task storage files.
+
+    The directory is automatically cleaned up after the test.
+
+    Yields:
+        Path to the temporary directory.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         yield tmpdir
 
 
 @pytest.fixture
 def fresh_queue():
-    """Create a fresh empty TaskQueue."""
+    """Create a fresh empty TaskQueue with a small max size.
+
+    Returns:
+        A TaskQueue instance with max_size=10.
+    """
     from api.queue import TaskQueue
     return TaskQueue(max_size=10)
 
 
 @pytest.fixture
 def sample_task():
-    """Create a sample task for testing."""
+    """Create a sample task with default values for testing.
+
+    Returns:
+        A Task instance with known test values.
+    """
     from api.queue import Task
     from api.models import TranscriptMode, WhisperModel, OutputFormat
     return Task(
@@ -56,7 +74,11 @@ def sample_task():
 
 @pytest.fixture
 def sample_completed_result() -> dict:
-    """Sample completed transcription result."""
+    """Create a sample completed transcription result.
+
+    Returns:
+        A dictionary mimicking a completed transcription result.
+    """
     return {
         "bvid": "BV1Gm421W75K",
         "title": "测试视频标题",
@@ -77,7 +99,11 @@ def sample_completed_result() -> dict:
 
 @pytest.fixture
 def sample_usage() -> dict:
-    """Sample usage info."""
+    """Create sample usage statistics.
+
+    Returns:
+        A dictionary with usage data.
+    """
     return {
         "source": "subtitle",
         "model": "",
