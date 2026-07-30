@@ -1,4 +1,4 @@
-"""In-memory task queue with thread-safe operations."""
+"""内存任务队列 — 线程安全的队列操作。"""
 
 from __future__ import annotations
 
@@ -19,15 +19,15 @@ from src.web.models import (
 )
 
 
-# Default task timeout: 6 hours
+# 默认任务超时时间：6 小时
 DEFAULT_TASK_TIMEOUT = 6 * 3600
-# Max pending tasks in queue
+# 队列最大待处理任务数
 MAX_QUEUE_SIZE = 100
 
 
 @dataclass
 class Task:
-    """Represents a single transcription task."""
+    """表示单个转录任务。"""
 
     task_id: str
     url: str
@@ -51,22 +51,22 @@ class Task:
     error: Optional[str] = None
 
     def elapsed_seconds(self) -> float:
-        """Calculate the time elapsed since the task was created.
+        """计算自任务创建以来经过的时间。
 
-        Returns:
-            Number of seconds since creation.
+        返回：
+            自创建以来的秒数。
         """
         return (datetime.now(timezone.utc) - self.created_at).total_seconds()
 
     def is_stale(self, timeout: int = DEFAULT_TASK_TIMEOUT) -> bool:
-        """Check if a running task has exceeded the allowed timeout.
+        """检查运行中的任务是否已超过允许的超时时间。
 
-        Args:
-            timeout: Maximum allowed runtime in seconds before considering
-                the task stale. Defaults to DEFAULT_TASK_TIMEOUT (6 hours).
+        参数：
+            timeout: 将任务视为僵死前的最大运行时间（秒）。
+                默认为 DEFAULT_TASK_TIMEOUT（6 小时）。
 
-        Returns:
-            True if the task is in processing state and has exceeded the timeout.
+        返回：
+            如果任务处于处理状态且已超过超时时间则返回 True。
         """
         if self.status != TaskStatus.processing or self.started_at is None:
             return False
@@ -75,33 +75,32 @@ class Task:
 
 
 class TaskQueue:
-    """Thread-safe in-memory task queue."""
+    """线程安全的内存任务队列。"""
 
     def __init__(self, max_size: int = MAX_QUEUE_SIZE):
         self._lock = threading.Lock()
         self._max_size = max_size
-        # OrderedDict maintains insertion order for FIFO
+        # OrderedDict 维护插入顺序以实现 FIFO
         self._tasks: OrderedDict[str, Task] = OrderedDict()
 
-    # ── Core operations ──
+    # ── 核心操作 ──
 
     def enqueue(self, task: Task) -> bool:
-        """Add a task to the queue.
+        """向队列添加任务。
 
-        Rejects the task if the queue is full or if a task with the
-        same BV ID is already pending or processing.
+        如果队列已满，或相同 BV ID 的任务已处于待处理/处理中状态，则拒绝添加。
 
-        Args:
-            task: The Task instance to enqueue.
+        参数：
+            task: 要入队的 Task 实例。
 
-        Returns:
-            True if the task was added, False if rejected.
+        返回：
+            任务添加成功返回 True，被拒绝返回 False。
         """
         with self._lock:
             if len(self._tasks) >= self._max_size:
                 return False
 
-            # Deduplication: same BV only one pending/processing allowed
+            # 去重：同一 BV 只允许一个待处理/处理中的任务
             bvid = self._extract_bvid(task.url)
             if bvid:
                 for t in self._tasks.values():
@@ -113,10 +112,10 @@ class TaskQueue:
             return True
 
     def dequeue(self) -> Optional[Task]:
-        """Retrieve the next pending task in FIFO order and mark it as processing.
+        """按 FIFO 顺序取出下一个待处理任务，并标记为处理中。
 
-        Returns:
-            The next pending Task, or None if the queue is empty.
+        返回：
+            下一个待处理的 Task，队列为空则返回 None。
         """
         with self._lock:
             for task_id, task in list(self._tasks.items()):
@@ -132,27 +131,27 @@ class TaskQueue:
             return None
 
     def peek(self, task_id: str) -> Optional[Task]:
-        """Get a task by ID without modifying its state.
+        """通过 ID 获取任务，不修改其状态。
 
-        Args:
-            task_id: The unique identifier of the task.
+        参数：
+            task_id: 任务的唯一标识符。
 
-        Returns:
-            The Task if found, or None.
+        返回：
+            找到则返回 Task，否则返回 None。
         """
         with self._lock:
             return self._tasks.get(task_id)
 
     def complete(self, task_id: str, result: dict, usage: dict) -> bool:
-        """Mark a task as completed with its result and usage data.
+        """将任务标记为已完成，附带结果和使用数据。
 
-        Args:
-            task_id: The unique identifier of the task.
-            result: The transcription result dictionary.
-            usage: The usage statistics dictionary.
+        参数：
+            task_id: 任务的唯一标识符。
+            result: 转录结果字典。
+            usage: 使用统计字典。
 
-        Returns:
-            True if the task was found and updated, False otherwise.
+        返回：
+            找到并更新任务返回 True，否则返回 False。
         """
         with self._lock:
             task = self._tasks.get(task_id)
@@ -168,14 +167,14 @@ class TaskQueue:
             return True
 
     def fail(self, task_id: str, error: str) -> bool:
-        """Mark a task as failed with an error message.
+        """将任务标记为失败，附带错误信息。
 
-        Args:
-            task_id: The unique identifier of the task.
-            error: A human-readable error description.
+        参数：
+            task_id: 任务的唯一标识符。
+            error: 人类可读的错误描述。
 
-        Returns:
-            True if the task was found and updated, False otherwise.
+        返回：
+            找到并更新任务返回 True，否则返回 False。
         """
         with self._lock:
             task = self._tasks.get(task_id)
@@ -192,18 +191,18 @@ class TaskQueue:
     def update_progress(self, task_id: str, phase: ProgressPhase, percent: int, message: str,
                         bytes_downloaded: int | None = None,
                         bytes_total: int | None = None) -> bool:
-        """Update the progress information for a running task.
+        """更新运行中任务的进度信息。
 
-        Args:
-            task_id: The unique identifier of the task.
-            phase: The current progress phase.
-            percent: Progress percentage (0-100).
-            message: A human-readable progress message.
-            bytes_downloaded: Optional bytes downloaded so far.
-            bytes_total: Optional total bytes to download.
+        参数：
+            task_id: 任务的唯一标识符。
+            phase: 当前进度阶段。
+            percent: 进度百分比（0-100）。
+            message: 人类可读的进度消息。
+            bytes_downloaded: 可选，已下载的字节数。
+            bytes_total: 可选，总下载字节数。
 
-        Returns:
-            True if the task was found and updated, False otherwise.
+        返回：
+            找到并更新任务返回 True，否则返回 False。
         """
         with self._lock:
             task = self._tasks.get(task_id)
@@ -215,20 +214,20 @@ class TaskQueue:
             )
             return True
 
-    # ── Query operations ──
+    # ── 查询操作 ──
 
     def list(self, status: str | None = None,
              limit: int = 20, offset: int = 0) -> tuple[list[Task], int]:
-        """List tasks with optional status filter and pagination.
+        """列出任务，支持可选的状态过滤和分页。
 
-        Args:
-            status: Optional status filter ('pending', 'processing',
-                'completed', 'failed'). Returns all statuses if None.
-            limit: Maximum number of tasks to return (default 20).
-            offset: Number of tasks to skip for pagination.
+        参数：
+            status: 可选的状态过滤（'pending'、'processing'、
+                'completed'、'failed'）。为 None 时返回所有状态。
+            limit: 返回的最大任务数（默认 20）。
+            offset: 分页跳过的任务数。
 
-        Returns:
-            A tuple of (list of Tasks, total count matching the filter).
+        返回：
+            (Task 列表, 匹配过滤条件的总数) 元组。
         """
         with self._lock:
             all_tasks = list(self._tasks.values())
@@ -236,7 +235,7 @@ class TaskQueue:
             if status:
                 all_tasks = [t for t in all_tasks if t.status.value == status]
 
-            # Sort by created_at descending
+            # 按 created_at 降序排序
             all_tasks.sort(key=lambda t: t.created_at, reverse=True)
 
             total = len(all_tasks)
@@ -244,11 +243,11 @@ class TaskQueue:
             return paginated, total
 
     def stats(self) -> dict[str, int]:
-        """Get queue statistics by status.
+        """获取按状态分类的队列统计信息。
 
-        Returns:
-            A dictionary with keys 'pending', 'processing', 'completed',
-            'failed' and their respective counts.
+        返回：
+            包含 'pending'、'processing'、'completed'、
+            'failed' 键及其对应计数的字典。
         """
         with self._lock:
             counts = {"pending": 0, "processing": 0, "completed": 0, "failed": 0}
@@ -259,13 +258,13 @@ class TaskQueue:
             return counts
 
     def remove(self, task_id: str) -> bool:
-        """Remove a task from the queue by its ID.
+        """通过 ID 从队列中移除任务。
 
-        Args:
-            task_id: The unique identifier of the task to remove.
+        参数：
+            task_id: 要移除的任务的唯一标识符。
 
-        Returns:
-            True if the task was found and removed, False otherwise.
+        返回：
+            找到并移除任务返回 True，否则返回 False。
         """
         with self._lock:
             if task_id in self._tasks:
@@ -273,16 +272,16 @@ class TaskQueue:
                 return True
             return False
 
-    # ── Maintenance ──
+    # ── 维护 ──
 
     def detect_stale_tasks(self, timeout: int = DEFAULT_TASK_TIMEOUT) -> list[Task]:
-        """Find and return all processing tasks that have exceeded the timeout.
+        """查找并返回所有已超过超时时间的处理中任务。
 
-        Args:
-            timeout: Maximum allowed runtime in seconds.
+        参数：
+            timeout: 最大允许运行时间（秒）。
 
-        Returns:
-            A list of stale Task instances.
+        返回：
+            僵死 Task 实例的列表。
         """
         stale = []
         with self._lock:
@@ -292,30 +291,30 @@ class TaskQueue:
         return stale
 
     def size(self) -> int:
-        """Get the total number of tasks currently in the queue.
+        """获取队列中当前的任务总数。
 
-        Returns:
-            The number of tasks (across all statuses).
+        返回：
+            任务数量（所有状态）。
         """
         with self._lock:
             return len(self._tasks)
 
-    # ── Helpers ──
+    # ── 辅助方法 ──
 
     @staticmethod
     def _extract_bvid(url: str) -> str | None:
-        """Extract the BV ID from a Bilibili URL or bare ID string.
+        """从 B 站 URL 或纯 ID 字符串中提取 BV ID。
 
-        Args:
-            url: A Bilibili URL or BV ID string.
+        参数：
+            url: B 站 URL 或 BV ID 字符串。
 
-        Returns:
-            The 12-character BV ID if found, or None.
+        返回：
+            找到则返回 12 位 BV ID，否则返回 None。
         """
         import re
         m = re.search(r"(BV[\w]{10})", url)
         return m.group(1) if m else None
 
 
-# Global singleton
+# 全局单例
 queue = TaskQueue()

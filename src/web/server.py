@@ -1,4 +1,4 @@
-"""Bilibili Transcript API — FastAPI application entry point."""
+"""Bilibili Transcript API — FastAPI 应用入口。"""
 
 from contextlib import asynccontextmanager
 
@@ -13,16 +13,15 @@ from src.web.worker import worker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage the application lifecycle.
+    """管理应用生命周期。
 
-    Starts the background transcription worker on startup and
-    performs a graceful shutdown on teardown.
+    启动时启动后台转录工作者，关闭时执行优雅关闭。
 
-    Args:
-        app: The FastAPI application instance.
+    参数：
+        app: FastAPI 应用实例。
 
-    Yields:
-        None: The application runs while the context manager is active.
+    生成：
+        None: 在上下文管理器激活期间应用运行。
     """
     worker.start()
     yield
@@ -38,7 +37,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Register routers
+# 注册路由
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(video_router, prefix="/api/v1")
 app.include_router(transcribe_router, prefix="/api/v1")
@@ -47,9 +46,9 @@ app.include_router(tasks_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
-    """Root endpoint — returns service status.
+    """根端点 — 返回服务状态。
 
-    Returns:
-        dict: Service name and status indicator.
+    返回：
+        dict: 服务名称和状态指示。
     """
     return {"status": "ok", "service": "bilibili-transcript-api"}

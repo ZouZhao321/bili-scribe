@@ -1,4 +1,4 @@
-"""Transcribe endpoints — submit transcription tasks and query results."""
+"""转录端点 — 提交转录任务和查询结果。"""
 
 from __future__ import annotations
 
@@ -41,20 +41,20 @@ from src.web.worker import worker
 
 router = APIRouter(tags=["transcribe"])
 
-# Whisper models that are fast enough for sync mode
+# 足够快以支持同步模式的 Whisper 模型
 SYNC_CAPABLE_MODELS = {WhisperModel.tiny, WhisperModel.base, WhisperModel.small}
 
 
 def _generate_task_id(bvid: str) -> str:
-    """Generate a unique task identifier.
+    """生成唯一的任务标识符。
 
-    Format: YYYYMMDD_HHMMSS_BVID_shortuuid
+    格式: YYYYMMDD_HHMMSS_BVID_shortuuid
 
-    Args:
-        bvid: The video BV ID to embed in the task ID.
+    参数：
+        bvid: 要嵌入任务 ID 的视频 BV ID。
 
-    Returns:
-        A unique task ID string.
+    返回：
+        唯一的任务 ID 字符串。
     """
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     short_uuid = uuid.uuid4().hex[:6]
@@ -62,15 +62,15 @@ def _generate_task_id(bvid: str) -> str:
 
 
 def _build_subtitle_entries(subtitles: list[dict]) -> list[SubtitleEntry]:
-    """Convert raw subtitle dictionaries to SubtitleEntry models.
+    """将原始字幕字典转换为 SubtitleEntry 模型。
 
-    Handles both 'from' and 'from_' keys for compatibility.
+    兼容处理 'from' 和 'from_' 键。
 
-    Args:
-        subtitles: List of raw subtitle segment dicts.
+    参数：
+        subtitles: 原始字幕片段字典列表。
 
-    Returns:
-        A list of SubtitleEntry model instances.
+    返回：
+        SubtitleEntry 模型实例列表。
     """
     entries = []
     for item in subtitles:
@@ -83,33 +83,31 @@ def _build_subtitle_entries(subtitles: list[dict]) -> list[SubtitleEntry]:
 
 
 def _build_full_text(subtitles: list[dict]) -> str:
-    """Concatenate subtitle content into a single plain-text string.
+    """将字幕内容拼接为单个纯文本字符串。
 
-    Args:
-        subtitles: List of subtitle segment dicts with 'content' keys.
+    参数：
+        subtitles: 包含 'content' 键的字幕片段字典列表。
 
-    Returns:
-        A single string with each subtitle on a new line.
+    返回：
+        每个字幕占一行的单一字符串。
     """
     return "\n".join(item.get("content", "").strip() for item in subtitles if item.get("content"))
 
 
 def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
-    """Attempt to transcribe a video synchronously using subtitles only.
+    """尝试仅使用字幕同步转录视频。
 
-    If the video has CC or AI subtitles, the result is returned immediately.
-    Returns None when no subtitles are available, signaling the caller to
-    fall back to asynchronous Whisper transcription.
+    如果视频有 CC 或 AI 字幕，立即返回结果。
+    没有可用字幕时返回 None，通知调用者降级到异步 Whisper 转录。
 
-    Args:
-        req: The transcription request.
+    参数：
+        req: 转录请求。
 
-    Returns:
-        A TranscribeResponse with the subtitle result, or None if
-        synchronous transcription is not possible.
+    返回：
+        包含字幕结果的 TranscribeResponse，或 None（同步转录不可用时）。
 
-    Raises:
-        HTTPException: If the URL is invalid or the video is not found.
+    抛出：
+        HTTPException: 如果 URL 无效或视频未找到。
     """
     try:
         bvid = extract_bvid(req.url)
@@ -137,7 +135,7 @@ def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
 
     start_time = time.time()
 
-    # Try subtitles
+    # 尝试字幕
     if req.mode in (TranscriptMode.auto, TranscriptMode.subtitle):
         sub_list = get_subtitle_url(bvid, cid, req.cookie)
         if sub_list:
@@ -185,65 +183,64 @@ def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
                 except Exception:
                     continue
 
-    # No subtitles found — sync not possible
+    # 未找到字幕 — 同步不可用
     return None
 
 
 def _should_use_async(req: TranscribeRequest) -> bool:
-    """Determine whether a request should be processed asynchronously.
+    """判断请求是否应异步处理。
 
-    Async mode is used when:
-    - mode is 'whisper' (forced Whisper)
-    - model is medium or larger (too slow for sync)
-    - webhook is provided (explicit async callback)
-    - mode is 'both' (requires Whisper)
+    异步模式用于以下情况：
+    - mode 为 'whisper'（强制 Whisper）
+    - 模型为 medium 或更大（同步太慢）
+    - 提供了 webhook（显式异步回调）
+    - mode 为 'both'（需要 Whisper）
 
-    Args:
-        req: The transcription request.
+    参数：
+        req: 转录请求。
 
-    Returns:
-        True if the request should be processed asynchronously.
+    返回：
+        如果请求应异步处理则返回 True。
     """
-    # Explicit async mode
+    # 显式异步模式
     if req.mode == TranscriptMode.whisper:
         return True
 
-    # Large models must be async
+    # 大模型必须异步
     if req.model not in SYNC_CAPABLE_MODELS:
         return True
 
-    # Webhook implies async
+    # Webhook 意味着异步
     if req.webhook:
         return True
 
-    # Both mode with Whisper requirement
+    # Both 模式需要 Whisper
     if req.mode == TranscriptMode.both:
         return True
 
-    # Auto mode: async if no subtitles (will fall back to Whisper)
-    # But we don't know yet, so we return False and let the sync path
-    # determine if it can handle it
+    # Auto 模式：如果没有字幕则异步（将降级到 Whisper）
+    # 但此时还不知道，返回 False 让同步路径判断
     return False
 
 
 @router.post("/transcribe", response_model=TranscribeResponse, status_code=status.HTTP_200_OK)
 async def submit_transcribe(req: TranscribeRequest):
-    """Submit a transcription task.
+    """提交转录任务。
 
-    For videos with subtitles: returns the result immediately (sync, 200).
-    For videos requiring Whisper: enqueues the task and returns 202.
+    有字幕的视频：立即返回结果（同步，200）。
+    需要 Whisper 的视频：将任务入队并返回 202。
 
-    Args:
-        req: The transcription request body.
+    参数：
+        req: 转录请求体。
 
-    Returns:
-        TranscribeResponse with the result (sync) or task ID (async).
+    返回：
+        包含结果（同步）或任务 ID（异步）的 TranscribeResponse。
 
-    Raises:
-        HTTPException 400: If the URL is invalid.
-        HTTPException 429: If the queue is full or duplicate BV.
+    抛出：
+        HTTPException 400: 如果 URL 无效。
+        HTTPException 429: 如果队列已满或重复 BV。
     """
-    # Validate URL by trying to extract BV ID
+    # 通过尝试提取 BV ID 来验证 URL
     try:
         bvid = extract_bvid(req.url)
     except SystemExit:
@@ -251,13 +248,13 @@ async def submit_transcribe(req: TranscribeRequest):
             "error": "invalid_url", "message": f"无法解析 URL: {req.url}",
         })
 
-    # Try sync path first
+    # 先尝试同步路径
     if not _should_use_async(req):
         sync_result = _try_sync_transcribe(req)
         if sync_result is not None:
             return sync_result
 
-    # Async path: enqueue task
+    # 异步路径：任务入队
     task_id = _generate_task_id(bvid)
 
     task = Task(
@@ -278,10 +275,10 @@ async def submit_transcribe(req: TranscribeRequest):
             "message": "队列已满或相同视频已有任务在处理中",
         })
 
-    # Persist immediately
+    # 立即持久化
     storage.save(task)
 
-    # Ensure worker is running
+    # 确保工作者在运行
     if not worker.is_running:
         worker.start()
 
@@ -300,20 +297,20 @@ async def submit_transcribe(req: TranscribeRequest):
 
 @router.get("/transcribe/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
-    """Get the status and result of a transcription task.
+    """获取转录任务的状态和结果。
 
-    Args:
-        task_id: The unique identifier of the task.
+    参数：
+        task_id: 任务的唯一标识符。
 
-    Returns:
-        TaskStatusResponse with progress, result, and usage info.
+    返回：
+        包含进度、结果和使用信息的 TaskStatusResponse。
 
-    Raises:
-        HTTPException 404: If the task does not exist.
+    抛出：
+        HTTPException 404: 如果任务不存在。
     """
     task = queue.peek(task_id)
 
-    # If not in memory, try loading from disk
+    # 如果不在内存中，尝试从磁盘加载
     if task is None:
         task = storage.load(task_id)
 
@@ -322,7 +319,7 @@ async def get_task_status(task_id: str):
             "error": "task_not_found", "message": f"任务不存在: {task_id}",
         })
 
-    # Build progress
+    # 构建进度
     progress = TaskProgress(
         phase=task.progress.phase,
         percent=task.progress.percent,
@@ -331,14 +328,14 @@ async def get_task_status(task_id: str):
         bytes_total=task.progress.bytes_total,
     )
 
-    # Build request summary
+    # 构建请求摘要
     request_info = TaskRequest(
         url=task.url,
         model=task.model.value if isinstance(task.model, WhisperModel) else task.model,
         output_format=task.output_format.value if isinstance(task.output_format, OutputFormat) else task.output_format,
     )
 
-    # Build result if completed
+    # 如果已完成，构建结果
     result = None
     usage = None
     if task.result:

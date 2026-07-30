@@ -1,4 +1,4 @@
-"""Video info endpoint — query Bilibili video metadata without transcribing."""
+"""视频信息端点 — 查询 B 站视频元数据，不进行转录。"""
 
 from __future__ import annotations
 
@@ -18,13 +18,13 @@ router = APIRouter(tags=["video"])
 
 
 def _format_duration(seconds: int) -> str:
-    """Convert a duration in seconds to MM:SS or HH:MM:SS format.
+    """将秒数转换为 MM:SS 或 HH:MM:SS 格式。
 
-    Args:
-        seconds: Duration in seconds.
+    参数：
+        seconds: 时长（秒）。
 
-    Returns:
-        Formatted duration string (e.g. "5:11" or "1:05:11").
+    返回：
+        格式化后的时长字符串（如 "5:11" 或 "1:05:11"）。
     """
     if seconds <= 0:
         return "0:00"
@@ -38,20 +38,20 @@ def _format_duration(seconds: int) -> str:
 
 @router.get("/video/info", response_model=VideoInfoResponse)
 async def video_info(url: str = Query(..., description="B站视频链接或BV号")):
-    """Get video metadata without transcribing.
+    """获取视频元数据，不进行转录。
 
-    Fetches video title, author, duration, cover, description, page list,
-    and subtitle availability from the Bilibili API.
+    从 B 站 API 获取视频标题、作者、时长、封面、描述、分 P 列表
+    和字幕可用性信息。
 
-    Args:
-        url: Bilibili video URL, BV ID, or av number.
+    参数：
+        url: B 站视频链接、BV ID 或 av 号。
 
-    Returns:
-        VideoInfoResponse with all available metadata.
+    返回：
+        包含所有可用元数据的 VideoInfoResponse。
 
-    Raises:
-        HTTPException 400: If the URL is invalid.
-        HTTPException 404: If the video does not exist.
+    抛出：
+        HTTPException 400: 如果 URL 无效。
+        HTTPException 404: 如果视频不存在。
     """
     try:
         bvid = extract_bvid(url)
@@ -71,13 +71,13 @@ async def video_info(url: str = Query(..., description="B站视频链接或BV号
     cover = video_data.get("pic", "")
     description = video_data.get("desc", "")
 
-    # Get page list
+    # 获取分 P 列表
     try:
         cid, _, total_pages = get_cid(bvid, 0)
     except SystemExit:
         cid, total_pages = 0, 1
 
-    # Build page list
+    # 构建页面列表
     pages_data = video_data.get("pages", [])
     pages = []
     for p in pages_data:
@@ -87,7 +87,7 @@ async def video_info(url: str = Query(..., description="B站视频链接或BV号
             cid=p.get("cid", 0),
         ))
 
-    # Check subtitle availability
+    # 检查字幕可用性
     has_subtitle = False
     subtitle_languages = []
     try:
