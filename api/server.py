@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from api.routes.health import router as health_router
+from api.routes.video import router as video_router
 from api.worker import worker
 
 
@@ -27,6 +28,7 @@ app = FastAPI(
 
 # Register routers
 app.include_router(health_router, prefix="/api/v1")
+app.include_router(video_router, prefix="/api/v1")
 
 
 @app.get("/")
