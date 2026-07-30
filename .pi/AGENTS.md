@@ -4,6 +4,25 @@
 
 B 站视频字幕提取 + Whisper 本地语音转录工具。支持 CC 字幕、AI 字幕、Whisper 本地转录三级降级策略。
 
+## 项目架构
+
+项目按 **核心引擎 → 使用方式** 分层组织：
+
+```
+bilibili-transcript/
+├── src/core/       # 核心引擎 — faster-whisper 封装 + B 站 API 交互
+├── src/shell/      # Shell 脚本使用方式 — 一键保存/后台队列/cron 调度/API管理
+├── src/web/        # FastAPI 服务使用方式 — 异步队列 + 持久化 + Webhook
+├── tests/          # 测试套件
+└── experiments/    # 实验记录
+```
+
+| 层级 | 说明 |
+| ------ | ------ |
+| `src/core/` | faster-whisper 为核心的转录引擎，B 站 API 封装，三级降级策略 |
+| `src/shell/` | Shell 脚本，封装 CLI 实现一键保存、后台队列、cron 调度 |
+| `src/web/` | FastAPI 服务，提供 RESTful HTTP API，支持同步/异步模式 |
+
 ## 默认工作流
 
 **所有下载和转录操作默认使用 `bili_save.sh` 保存模式**，即自动保存音频、文稿和视频链接信息到 `~/bilibili-output/` 目录。
@@ -12,13 +31,13 @@ B 站视频字幕提取 + Whisper 本地语音转录工具。支持 CC 字幕、
 
 ```bash
 # 后台队列模式：自动排队，可同时提交多个（推荐）
-./bili_bg.sh "视频URL1" "视频URL2" ... [model]
+./src/shell/bili_bg.sh "视频URL1" "视频URL2" ... [model]
 
 # 默认流程：下载 + 转录 + 保存（前台运行）
-./bili_save.sh "视频URL" [model]
+./src/shell/bili_save.sh "视频URL" [model]
 
 # 快速查看（不保存文件）
-./bili.sh "视频URL" [model]
+./src/shell/bili.sh "视频URL" [model]
 
 # 直接调用 Python 脚本
 python3 fetch_transcript.py "视频URL" [options]
@@ -28,13 +47,13 @@ python3 fetch_transcript.py "视频URL" [options]
 
 ```bash
 # 查看队列状态（运行中/已完成/失败）
-./bili_bg.sh --status
+./src/shell/bili_bg.sh --status
 
 # 查看某个任务的详细日志
-./bili_bg.sh --log <task_id>
+./src/shell/bili_bg.sh --log <task_id>
 
 # 从文件批量提交（每行一个URL）
-./bili_bg.sh urls.txt [model]
+./src/shell/bili_bg.sh urls.txt [model]
 ```
 
 ### 输出目录结构
@@ -74,35 +93,35 @@ python3 fetch_transcript.py "视频URL" [options]
 
 ```bash
 # 单个视频后台运行
-./bili_bg.sh "https://www.bilibili.com/video/BV1xxx"
+./src/shell/bili_bg.sh "https://www.bilibili.com/video/BV1xxx"
 
 # 多个视频自动排队
-./bili_bg.sh "BV1xxx" "BV2xxx" "BV3xxx"
+./src/shell/bili_bg.sh "BV1xxx" "BV2xxx" "BV3xxx"
 
 # 从文件批量提交
-./bili_bg.sh urls.txt small
+./src/shell/bili_bg.sh urls.txt small
 
 # 查看队列状态
-./bili_bg.sh --status
+./src/shell/bili_bg.sh --status
 
 # 查看任务日志
-./bili_bg.sh --log BV1xxx_1234567890
+./src/shell/bili_bg.sh --log BV1xxx_1234567890
 ```
 
 ### 下载并转录视频（前台）
 
 ```bash
-./bili_save.sh "https://www.bilibili.com/video/BV1xxx"
-./bili_save.sh "BV1xxx" tiny    # 快速
-./bili_save.sh "BV1xxx" small   # 默认
-./bili_save.sh "BV1xxx" medium  # 高质量
+./src/shell/bili_save.sh "https://www.bilibili.com/video/BV1xxx"
+./src/shell/bili_save.sh "BV1xxx" tiny    # 快速
+./src/shell/bili_save.sh "BV1xxx" small   # 默认
+./src/shell/bili_save.sh "BV1xxx" medium  # 高质量
 ```
 
 ### 仅查看文稿（不保存）
 
 ```bash
-./bili.sh "BV1xxx"
-./bili.sh "BV1xxx" --timestamps  # 带时间戳
+./src/shell/bili.sh "BV1xxx"
+./src/shell/bili.sh "BV1xxx" --timestamps  # 带时间戳
 ```
 
 ### JSON 格式输出
@@ -191,19 +210,19 @@ segments = self.generate_segments(features, ...)                    # 30秒窗�
 
 ```bash
 # 后台启动（默认端口 8000）
-./script/api.sh start
+./src/shell/api.sh start
 
 # 查看服务状态
-./script/api.sh status
+./src/shell/api.sh status
 
 # 查看实时日志
-./script/api.sh logs
+./src/shell/api.sh logs
 
 # 停止服务
-./script/api.sh stop
+./src/shell/api.sh stop
 
 # 自定义端口
-API_PORT=8080 ./script/api.sh start
+API_PORT=8080 ./src/shell/api.sh start
 ```
 
 启动后访问 `http://localhost:8000/docs` 查看交互式 API 文档（Swagger UI）。
@@ -296,23 +315,33 @@ curl http://localhost:8000/api/v1/health
 }
 ```
 
-### 项目结构（API 相关）
+### 项目结构
 
 ```
 bilibili-transcript/
-├── api/                       # API 服务代码
-│   ├── server.py              # FastAPI 应用入口
-│   ├── models.py              # Pydantic 数据模型
-│   ├── queue.py               # 内存任务队列
-│   ├── storage.py             # 任务持久化 (JSON)
-│   ├── worker.py              # 后台转录工作者
-│   └── routes/
-│       ├── health.py          # GET /api/v1/health
-│       ├── transcribe.py      # POST + GET /api/v1/transcribe
-│       ├── tasks.py           # GET /api/v1/tasks
-│       └── video.py           # GET /api/v1/video/info
-├── script/api.sh              # API 服务管理脚本
+├── src/
+│   ├── core/                  # 核心引擎
+│   │   ├── transcriber.py     #   faster-whisper + B站 API + CLI 入口
+│   │   └── download_audio.py  #   批量音频下载
+│   ├── shell/                 # Shell 脚本使用方式
+│   │   ├── bili_save.sh       #   一键保存音频+文稿+链接
+│   │   ├── bili.sh            #   精简包装
+│   │   ├── bili_bg.sh         #   后台队列批量处理
+│   │   ├── bili_queue.sh      #   cron 定时调度
+│   │   └── api.sh             #   API 启停管理
+│   └── web/                   # FastAPI 服务使用方式
+│       ├── server.py          #   FastAPI 应用入口
+│       ├── models.py          #   Pydantic 数据模型
+│       ├── queue.py           #   内存任务队列
+│       ├── worker.py          #   后台转录工作者
+│       ├── storage.py         #   任务持久化 (JSON)
+│       └── routes/
+│           ├── health.py      #   GET /api/v1/health
+│           ├── transcribe.py  #   POST + GET /api/v1/transcribe
+│           ├── tasks.py       #   GET /api/v1/tasks
+│           └── video.py       #   GET /api/v1/video/info
 ├── docs/API_DESIGN.md         # 完整接口设计文档
+├── fetch_transcript.py        # 兼容入口（委派到 src.core.transcriber）
 └── pyproject.toml             # 依赖定义（uv）
 ```
 
