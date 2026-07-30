@@ -117,3 +117,146 @@ python3 fetch_transcript.py "BV1xxx" --json
 - 首次使用 small 以上模型会自动下载模型文件
 - 输出目录 `~/bilibili-output/` 由脚本自动创建
 - 虚拟环境 Python 路径：`/opt/data/.venv-whisper/bin/python3`
+
+---
+
+## HTTP API 服务
+
+项目提供 RESTful API，通过 HTTP 调用转录功能。
+
+### 启动服务
+
+```bash
+# 后台启动（默认端口 8000）
+./script/api.sh start
+
+# 查看服务状态
+./script/api.sh status
+
+# 查看实时日志
+./script/api.sh logs
+
+# 停止服务
+./script/api.sh stop
+
+# 自定义端口
+API_PORT=8080 ./script/api.sh start
+```
+
+启动后访问 `http://localhost:8000/docs` 查看交互式 API 文档（Swagger UI）。
+
+### 接口列表
+
+| 方法 | 路径 | 说明 |
+| ------ | ------ | ------ |
+| `GET` | `/api/v1/health` | 健康检查 + 队列状态 + 组件检查 |
+| `POST` | `/api/v1/transcribe` | 提交转录任务（同步秒出或异步 202） |
+| `GET` | `/api/v1/transcribe/:task_id` | 查询任务状态和结果 |
+| `GET` | `/api/v1/tasks` | 列出所有任务（分页/过滤） |
+| `GET` | `/api/v1/video/info` | 查询视频信息（不转录） |
+
+### 常用 API 调用
+
+```bash
+# 快速转录（有字幕秒出）
+curl -X POST http://localhost:8000/api/v1/transcribe \
+  -H "Content-Type: application/json" \
+  -d '{"url": "BV1Gm421W75K"}'
+
+# 强制 Whisper 转录（异步，返回 task_id）
+curl -X POST http://localhost:8000/api/v1/transcribe \
+  -H "Content-Type: application/json" \
+  -d '{"url": "BV1Gm421W75K", "mode": "whisper", "model": "tiny"}'
+
+# 轮询异步任务结果
+curl http://localhost:8000/api/v1/transcribe/<task_id>
+
+# 查询视频信息（不转录）
+curl "http://localhost:8000/api/v1/video/info?url=BV1Gm421W75K"
+
+# 健康检查
+curl http://localhost:8000/api/v1/health
+```
+
+### 请求参数说明
+
+```json
+{
+  "url": "BV1Gm421W75K",           // 必填，支持 BV/av/b23.tv
+  "mode": "auto",                   // auto / subtitle / whisper / both
+  "model": "small",                 // tiny / base / small / medium / large-v3
+  "language": "zh",                 // Whisper 语言提示
+  "page": 0,                         // 分 P 序号
+  "output_format": "text",          // text / timestamps / json
+  "webhook": "https://..."          // 异步完成回调（可选）
+}
+```
+
+### 同步 vs 异步策略
+
+| 条件 | 模式 | HTTP 状态码 |
+| ------ | ------ | ----------- |
+| 有 CC/AI 字幕 | 同步 | 200，立即返回结果 |
+| 强制 `mode=whisper` | 异步 | 202，返回 task_id |
+| 模型 medium 以上 | 异步 | 202，返回 task_id |
+| 提供了 webhook | 异步 | 202，返回 task_id |
+
+### 任务状态轮询
+
+异步提交后，通过 `GET /api/v1/transcribe/:task_id` 轮询：
+
+```json
+// 处理中
+{
+  "status": "processing",
+  "progress": {
+    "phase": "downloading_audio",
+    "percent": 50,
+    "message": "正在下载音频流..."
+  }
+}
+
+// 已完成
+{
+  "status": "completed",
+  "result": {
+    "bvid": "BV1xxx",
+    "title": "视频标题",
+    "source": "whisper",
+    "entries": 120,
+    "full_text": "..."
+  },
+  "usage": {
+    "model": "small",
+    "duration_seconds": 930
+  }
+}
+```
+
+### 项目结构（API 相关）
+
+```
+bilibili-transcript/
+├── api/                       # API 服务代码
+│   ├── server.py              # FastAPI 应用入口
+│   ├── models.py              # Pydantic 数据模型
+│   ├── queue.py               # 内存任务队列
+│   ├── storage.py             # 任务持久化 (JSON)
+│   ├── worker.py              # 后台转录工作者
+│   └── routes/
+│       ├── health.py          # GET /api/v1/health
+│       ├── transcribe.py      # POST + GET /api/v1/transcribe
+│       ├── tasks.py           # GET /api/v1/tasks
+│       └── video.py           # GET /api/v1/video/info
+├── script/api.sh              # API 服务管理脚本
+├── docs/API_DESIGN.md         # 完整接口设计文档
+└── pyproject.toml             # 依赖定义（uv）
+```
+
+### 依赖安装
+
+```bash
+# 使用 uv 安装所有依赖（包含 API）
+uv venv
+uv pip install -e .
+```
