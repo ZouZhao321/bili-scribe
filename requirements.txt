@@ -1,4 +1,0 @@
-# 使用 uv 管理依赖
-# 安装: uv sync
-# 添加依赖: uv add <package>
-# 查看: 依赖定义在 pyproject.toml 中

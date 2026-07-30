@@ -9,7 +9,7 @@
 # Status: ./bili_bg.sh --status
 #         ./bili_bg.sh --log <task_id>
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && cd .. && pwd)"
 shopt -s nullglob
 QUEUE_DIR="$HOME/bilibili-output/.queue"
 LOCK_FILE="$QUEUE_DIR/queue.lock"
@@ -145,7 +145,7 @@ for url in "${URLS[@]}"; do
         echo "" >> "$LOG_FILE"
         
         # 执行转录
-        "$SCRIPT_DIR/bili_save.sh" "$url" "$MODEL" >> "$LOG_FILE" 2>&1
+        "$SCRIPT_DIR/script/bili_save.sh" "$url" "$MODEL" >> "$LOG_FILE" 2>&1
         EXIT_CODE=$?
         
         echo "" >> "$LOG_FILE"

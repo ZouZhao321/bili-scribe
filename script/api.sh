@@ -8,7 +8,7 @@
 #   status  - 查看服务状态
 #   logs    - 查看日志
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && cd .. && pwd)"
 VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python3"
 
 if [ ! -f "$VENV_PYTHON" ]; then
