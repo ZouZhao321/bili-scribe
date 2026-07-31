@@ -62,9 +62,9 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
     except Exception:
         pass
 
-    # 3. 创建安全文件名
-    safe_title = title[:20].replace("/", "_").replace(" ", "_")
-    filename = f"{bvid}_{safe_title}" if not task_id else f"{task_id}_{safe_title}"
+    # 3. 创建安全文件名（BV号_标题，标题截断 100 字符）
+    safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
+    filename = f"{bvid}_{safe_title}"
 
     # 4. 确保输出目录
     audio_dir = OUTPUT_DIR / "audio"
