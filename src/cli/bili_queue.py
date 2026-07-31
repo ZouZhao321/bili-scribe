@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bilibili 转录任务队列 — 持久化队列 + cron 定时调度.
+"""Bilibili 转录任务队列 — CLI 入口 + cron 定时调度.
 
 用法:
     bili_queue.py add <URL> [model]              添加任务到队列
@@ -21,12 +21,8 @@
 """
 
 import argparse
-import json
-import logging
 import subprocess
 import sys
-import time
-import urllib.error
 from datetime import datetime
 from pathlib import Path
 
@@ -36,318 +32,28 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.core.bilibili import (  # noqa: E402
-    download_audio,
-    download_subtitle_json,
-    extract_bvid,
-    get_audio_url,
-    get_cid,
-    get_subtitle_url,
-    get_video_info,
+from src.core.bilibili import extract_bvid  # noqa: E402
+from src.core.queue_store import (  # noqa: E402
+    BLUE,
+    CPU_THRESHOLD,
+    GREEN,
+    LOG_FILE,
+    MAX_RETRIES,
+    NC,
+    RED,
+    YELLOW,
+    FileLock,
+    TaskStore,
+    get_cpu_usage,
+    logger,
 )
-from src.core.transcriber import whisper_transcribe  # noqa: E402
+from src.core.runner import TIMEOUT, run_transcription  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
-QUEUE_DIR = Path.home() / ".queue"
-PENDING_DIR = QUEUE_DIR / "pending"
-RUNNING_DIR = QUEUE_DIR / "running"
-DONE_DIR = QUEUE_DIR / "done"
-FAILED_DIR = QUEUE_DIR / "failed"
-LOCK_FILE = QUEUE_DIR / "queue.lock"
-TASKS_FILE = QUEUE_DIR / "tasks.json"
-LOG_FILE = QUEUE_DIR / "cron.log"
-
-MAX_RETRIES = 3
-TIMEOUT = 6 * 3600  # 6 小时
-CPU_THRESHOLD = 50
-OUTPUT_DIR = PROJECT_ROOT / "out"
-
-# ---------------------------------------------------------------------------
-# 日志
-# ---------------------------------------------------------------------------
-_log_configured = False
-
-
-def get_logger():
-    """获取 logger，确保日志目录存在."""
-    global _log_configured
-    if not _log_configured:
-        QUEUE_DIR.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-        logger = logging.getLogger("bili_queue")
-        logger.setLevel(logging.INFO)
-        logger.addHandler(handler)
-        logger.propagate = False
-        _log_configured = True
-    return logging.getLogger("bili_queue")
-
-
-logger = get_logger()
-
-# ---------------------------------------------------------------------------
-# 颜色（终端输出用）
-# ---------------------------------------------------------------------------
-GREEN = "\033[0;32m"
-YELLOW = "\033[1;33m"
-RED = "\033[0;31m"
-BLUE = "\033[0;34m"
-NC = "\033[0m"
-
-
-def _echo(color, symbol, msg):
-    """带颜色输出到终端."""
-    print(f"{color}{symbol}{NC} {msg}")
-
-
-# ---------------------------------------------------------------------------
-# 任务存储
-# ---------------------------------------------------------------------------
-class TaskStore:
-    """基于 JSON 文件的任务持久化存储."""
-
-    def __init__(self, path: Path):
-        self.path = path
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._tasks: dict = {}
-        self._load()
-
-    # -- 读写 ---------------------------------------------------------------
-    def _load(self):
-        try:
-            if self.path.exists():
-                with open(self.path, encoding="utf-8") as f:
-                    self._tasks = json.load(f)
-            else:
-                self._tasks = {}
-        except (json.JSONDecodeError, OSError):
-            self._tasks = {}
-
-    def _save(self):
-        try:
-            with open(self.path, "w", encoding="utf-8") as f:
-                json.dump(self._tasks, f, ensure_ascii=False, indent=2)
-        except OSError:
-            pass
-
-    # -- CRUD ---------------------------------------------------------------
-    def add(self, task_id: str, url: str, model: str):
-        self._tasks[task_id] = {
-            "url": url,
-            "model": model,
-            "status": "pending",
-            "retries": 0,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "started_at": None,
-            "completed_at": None,
-            "last_error": None,
-        }
-        self._save()
-
-    def get(self, task_id: str) -> dict | None:
-        return self._tasks.get(task_id)
-
-    def update(self, task_id: str, **kwargs):
-        if task_id in self._tasks:
-            self._tasks[task_id].update(kwargs)
-            self._save()
-
-    def remove(self, task_id: str):
-        self._tasks.pop(task_id, None)
-        self._save()
-
-    # -- 查询 ---------------------------------------------------------------
-    def list_by_status(self, status: str | None = None) -> dict:
-        if status:
-            return {k: v for k, v in self._tasks.items() if v["status"] == status}
-        return dict(self._tasks)
-
-    def count_by_status(self, status: str) -> int:
-        return sum(1 for v in self._tasks.values() if v["status"] == status)
-
-    def next_pending(self) -> str | None:
-        """取最早创建的 pending 任务 ID."""
-        pending = [(tid, t) for tid, t in self._tasks.items() if t["status"] == "pending"]
-        if not pending:
-            return None
-        pending.sort(key=lambda x: x[1].get("created_at", ""))
-        return pending[0][0]
-
-    def running_task(self) -> str | None:
-        """取当前 running 任务 ID."""
-        for tid, t in self._tasks.items():
-            if t["status"] == "running":
-                return tid
-        return None
-
-
-# ---------------------------------------------------------------------------
-# 文件锁
-# ---------------------------------------------------------------------------
-class FileLock:
-    """基于 mkdir 原子操作的文件锁（与 shell 版兼容，进程崩溃自动释放）."""
-
-    def __init__(self, path: Path):
-        self.path = path
-
-    def acquire(self, timeout: float = 30.0) -> bool:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        start = time.time()
-        while time.time() - start < timeout:
-            try:
-                self.path.mkdir(mode=0o700, exist_ok=False)
-                return True
-            except FileExistsError:
-                time.sleep(0.5)
-        return False
-
-    def release(self):
-        try:
-            self.path.rmdir()
-        except OSError:
-            pass
-
-    def __enter__(self):
-        if not self.acquire():
-            raise TimeoutError(f"无法获取锁: {self.path}")
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.release()
-
-
-# ---------------------------------------------------------------------------
-# CPU 使用率
-# ---------------------------------------------------------------------------
-def get_cpu_usage() -> int:
-    """读取 /proc/stat 计算 CPU 使用率（纯标准库，无需 psutil）."""
-    try:
-        with open("/proc/stat") as f:
-            fields = f.readline().split()
-        idle1 = int(fields[4]) + int(fields[5])  # idle + iowait
-        total1 = sum(int(v) for v in fields[1:])
-        time.sleep(1)
-        with open("/proc/stat") as f:
-            fields = f.readline().split()
-        idle2 = int(fields[4]) + int(fields[5])
-        total2 = sum(int(v) for v in fields[1:])
-        delta_total = total2 - total1
-        delta_idle = idle2 - idle1
-        if delta_total <= 0:
-            return 0
-        return int(100 * (delta_total - delta_idle) / delta_total)
-    except (OSError, IndexError, ValueError):
-        return 0
-
-
-# ---------------------------------------------------------------------------
-# 转录执行
-# ---------------------------------------------------------------------------
-def run_transcription(url: str, model: str, task_id: str) -> dict:
-    """执行完整转录流程，返回结果字典.
-
-    返回:
-        {"success": True, "bv": "...", "title": "...", "transcript": "...", "audio": "..."}
-        {"success": False, "error": "..."}
-    """
-    # 1. 解析 BV ID
-    try:
-        bvid = extract_bvid(url)
-    except Exception as e:
-        return {"success": False, "error": f"URL 解析失败: {e}"}
-
-    # 2. 获取视频信息
-    title = bvid
-    duration = 0
-    try:
-        info = get_video_info(bvid)
-        title = info.get("title", bvid)
-        duration = info.get("duration", 0)
-    except Exception:
-        pass
-
-    # 3. 创建安全文件名
-    safe_title = title[:20].replace("/", "_").replace(" ", "_")
-    filename = f"{bvid}_{safe_title}"
-
-    # 4. 确保输出目录
-    audio_dir = OUTPUT_DIR / "audio"
-    transcript_dir = OUTPUT_DIR / "transcripts"
-    audio_dir.mkdir(parents=True, exist_ok=True)
-    transcript_dir.mkdir(parents=True, exist_ok=True)
-
-    # 5. 保存链接信息
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    link_info = (
-        f"视频链接: https://www.bilibili.com/video/{bvid}/\n"
-        f"BV号: {bvid}\n"
-        f"标题: {title}\n"
-        f"时长: {duration}秒\n"
-        f"转录模型: {model}\n"
-        f"转录时间: {now}\n"
-    )
-    (transcript_dir / f"{filename}_link.txt").write_text(link_info, encoding="utf-8")
-
-    # 6. 执行转录（三级降级）
-    audio_path = audio_dir / f"{filename}.m4s"
-    transcript_path = transcript_dir / f"{filename}.txt"
-
-    # 获取 CID
-    try:
-        cid, _part_title, _total_pages = get_cid(bvid, 0)
-    except Exception as e:
-        return {"success": False, "error": f"获取 CID 失败: {e}"}
-
-    subtitles = []
-
-    # 第 1/2 级：CC/AI 字幕
-    try:
-        sub_list = get_subtitle_url(bvid, cid, "")
-        if sub_list:
-            cc_subs = [s for s in sub_list if not s.get("lan", "").startswith("ai")]
-            ai_subs = [s for s in sub_list if s.get("lan", "").startswith("ai")]
-            for sub in cc_subs + ai_subs:
-                try:
-                    sub_data = download_subtitle_json(sub["subtitle_url"])
-                    body = sub_data.get("body", [])
-                    if body:
-                        subtitles = body
-                        break
-                except urllib.error.URLError:
-                    continue
-    except Exception:
-        pass
-
-    # 第 3 级：Whisper 降级
-    if not subtitles:
-        try:
-            audio_url = get_audio_url(bvid, cid)
-            if audio_url:
-                referer = f"https://www.bilibili.com/video/{bvid}/"
-                download_audio(audio_url, str(audio_path), referer)
-                result = whisper_transcribe(str(audio_path), "zh", model)
-                if result:
-                    subtitles = result
-        except Exception as e:
-            return {"success": False, "error": f"Whisper 转录失败: {e}"}
-
-    if not subtitles:
-        return {"success": False, "error": "该视频没有可用字幕"}
-
-    # 7. 写入文稿
-    lines = [item.get("content", "") for item in subtitles]
-    transcript_path.write_text("\n".join(lines), encoding="utf-8")
-
-    return {
-        "success": True,
-        "bv": bvid,
-        "title": title,
-        "transcript": str(transcript_path),
-        "audio": str(audio_path) if audio_path.exists() else None,
-        "lines": len(lines),
-    }
+LOCK_FILE = Path.home() / ".queue" / "queue.lock"
+TASKS_FILE = Path.home() / ".queue" / "tasks.json"
 
 
 # ---------------------------------------------------------------------------
@@ -824,37 +530,6 @@ def main():
         "uninstall-cron": cmd_uninstall_cron,
     }
     cmd_map[args.command](args)
-
-
-# ---------------------------------------------------------------------------
-# 兼容入口（供 fetch_transcript.py / pyproject.toml 调用）
-# ---------------------------------------------------------------------------
-def cli_main():
-    """命令行转录入口，与旧 main.py 接口兼容."""
-    parser = argparse.ArgumentParser(description="获取 B 站视频字幕")
-    parser.add_argument("url", help="B 站视频链接或 BV ID")
-    parser.add_argument("--text-only", action="store_true", help="仅输出纯文本")
-    parser.add_argument("--timestamps", action="store_true", help="包含时间戳")
-    parser.add_argument("--page", type=int, default=0, help="分 P 序号（从 0 开始）")
-    parser.add_argument("--whisper", action="store_true", help="强制使用 Whisper 降级")
-    parser.add_argument("--cookie", default="", help="B 站登录 Cookie")
-    parser.add_argument("--json", action="store_true", help="输出原始 JSON")
-    parser.add_argument("--language", default="zh", help="Whisper 语言提示（默认: zh）")
-    parser.add_argument("--model", default="small", help="Whisper 模型大小")
-    parser.add_argument("--save-audio", default="", help="保存音频文件到指定路径")
-    args = parser.parse_args()
-
-    # 复用 run_transcription 获取转录结果
-    result = run_transcription(args.url, args.model, "cli")
-    if not result["success"]:
-        print(result["error"], file=sys.stderr)
-        sys.exit(1)
-
-    # 读回文稿
-    transcript_path = result.get("transcript")
-    if transcript_path:
-        text = Path(transcript_path).read_text(encoding="utf-8")
-        print(text)
 
 
 if __name__ == "__main__":
