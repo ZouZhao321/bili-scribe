@@ -3,22 +3,25 @@
 调用 bilibili.py 获取视频信息/字幕/音频流，
 调用 transcriber.py 进行 Whisper 转录。
 """
+
 import argparse
+import contextlib
 import json
 import os
 import sys
 import tempfile
+import urllib.error
 
 from src.core.bilibili import (
-    extract_bvid,
-    get_cid,
-    get_video_info,
-    get_subtitle_url,
-    download_subtitle_json,
-    get_audio_url,
     download_audio,
+    download_subtitle_json,
+    extract_bvid,
+    get_audio_url,
+    get_cid,
+    get_subtitle_url,
+    get_video_info,
 )
-from src.core.transcriber import whisper_transcribe, format_timestamp
+from src.core.transcriber import format_timestamp, whisper_transcribe
 
 
 def main():
@@ -36,7 +39,9 @@ def main():
     parser.add_argument("--cookie", default="", help="B 站登录 Cookie（用于需要登录的视频）")
     parser.add_argument("--json", action="store_true", help="输出原始 JSON")
     parser.add_argument("--language", default="zh", help="Whisper 语言提示（默认: zh）")
-    parser.add_argument("--model", default="small", help="Whisper 模型大小: tiny/base/small/medium/large-v3（默认: small）")
+    parser.add_argument(
+        "--model", default="small", help="Whisper 模型大小: tiny/base/small/medium/large-v3（默认: small）"
+    )
     parser.add_argument("--save-audio", default="", help="保存音频文件到指定路径")
     args = parser.parse_args()
 
@@ -79,7 +84,7 @@ def main():
                         source = "cc" if not sub.get("lan", "").startswith("ai") else "ai"
                         print(f"使用: {source} 字幕 ({len(subtitles)} 条)", file=sys.stderr)
                         break
-                except Exception as e:
+                except urllib.error.URLError as e:
                     print(f"下载字幕失败: {e}", file=sys.stderr)
                     continue
         else:
@@ -105,6 +110,7 @@ def main():
             if download_audio(audio_url, audio_path, referer):
                 if args.save_audio:
                     import shutil
+
                     shutil.copy2(audio_path, args.save_audio)
                     print(f"音频已保存到: {args.save_audio}", file=sys.stderr)
 
@@ -113,10 +119,8 @@ def main():
                     source = "whisper"
                     print(f"Whisper: {len(subtitles)} 个片段", file=sys.stderr)
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(audio_path)
-            except OSError:
-                pass
 
     if not subtitles:
         print("错误: 该视频没有可用字幕。", file=sys.stderr)

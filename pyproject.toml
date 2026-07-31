@@ -37,8 +37,12 @@ select = [
 
 # 忽略的规则
 ignore = [
-  "E501", # 行长度，由 formatter 处理
-  "N818", # 异常命名后缀
+  "E501",   # 行长度，由 formatter 处理
+  "N818",   # 异常命名后缀
+  "RUF001", # 全角字符（中文项目使用全角标点）
+  "RUF002", # 全角字符在 docstring 中
+  "RUF003", # 全角字符在注释中
+  "S310",   # urllib 使用（API 交互项目，需直接控制 HTTP）
 ]
 
 [tool.ruff.lint.per-file-ignores]

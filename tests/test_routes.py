@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import status
 from fastapi.testclient import TestClient
+
 from src.web.queue import queue
 from src.web.storage import storage
 
@@ -131,7 +131,9 @@ class TestTranscribeEndpoint:
             task = queue.peek(task_id)
             if task and "BV1bswFeCEGo" in task.url:
                 queue.complete(task_id, {}, {})
-                storage.save(queue.peek(task_id))
+                completed = queue.peek(task_id)
+                if completed:
+                    storage.save(completed)
 
         # First request
         api_client.post(

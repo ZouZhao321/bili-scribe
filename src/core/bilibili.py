@@ -2,13 +2,12 @@
 
 提供与 B 站 API 通信的所有函数，不涉及 Whisper 转录逻辑。
 """
+
 import json
 import re
 import sys
 import urllib.error
 import urllib.request
-from typing import Optional
-
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -39,7 +38,7 @@ def api_get(url: str, cookie: str = "") -> dict:
     except urllib.error.HTTPError as e:
         print(f"HTTP 错误 {e.code}: {e.reason}", file=sys.stderr)
         sys.exit(1)
-    except Exception as e:
+    except urllib.error.URLError as e:
         print(f"请求错误: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -65,7 +64,7 @@ def extract_bvid(url: str) -> str:
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 url = resp.url
-        except Exception:
+        except urllib.error.URLError:
             pass
 
     m = re.search(r"(BV[\w]{10})", url)
@@ -165,7 +164,7 @@ def download_subtitle_json(subtitle_url: str) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def get_audio_url(bvid: str, cid: str) -> Optional[str]:
+def get_audio_url(bvid: str, cid: str) -> str | None:
     """从 B 站 playurl API 获取音频流 URL。
 
     参数：
@@ -213,6 +212,6 @@ def download_audio(audio_url: str, output_path: str, referer: str = "") -> bool:
                     total += len(chunk)
             print(f"已下载 {total} 字节", file=sys.stderr)
             return True
-    except Exception as e:
+    except (urllib.error.URLError, OSError) as e:
         print(f"下载错误: {e}", file=sys.stderr)
         return False

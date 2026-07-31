@@ -2,10 +2,9 @@
 
 这是项目中唯一与 faster-whisper 交互的模块，不包含任何 B 站 API 逻辑。
 """
-from typing import Optional
 
 
-def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = "small") -> Optional[list]:
+def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = "small") -> list | None:
     """使用 faster-whisper 转录音频文件。
 
     参数：
@@ -21,27 +20,23 @@ def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = 
     try:
         from faster_whisper import WhisperModel
     except ImportError:
-        print("错误: 未安装 faster-whisper。", file=__import__('sys').stderr)
-        print("安装: uv pip install faster-whisper", file=__import__('sys').stderr)
+        print("错误: 未安装 faster-whisper。", file=__import__("sys").stderr)
+        print("安装: uv pip install faster-whisper", file=__import__("sys").stderr)
         return None
 
     try:
-        print(f"正在加载 Whisper 模型 ({model_size}, CPU)...", file=__import__('sys').stderr)
+        print(f"正在加载 Whisper 模型 ({model_size}, CPU)...", file=__import__("sys").stderr)
         model = WhisperModel(model_size, device="cpu", compute_type="int8")
-        print("正在转录...", file=__import__('sys').stderr)
+        print("正在转录...", file=__import__("sys").stderr)
         segments, info = model.transcribe(audio_path, language=language, beam_size=5)
-        print(f"检测到语言: {info.language} (概率: {info.language_probability:.2f})", file=__import__('sys').stderr)
+        print(f"检测到语言: {info.language} (概率: {info.language_probability:.2f})", file=__import__("sys").stderr)
 
         result = []
         for seg in segments:
-            result.append({
-                "from": seg.start,
-                "to": seg.end,
-                "content": seg.text.strip()
-            })
+            result.append({"from": seg.start, "to": seg.end, "content": seg.text.strip()})
         return result
-    except Exception as e:
-        print(f"Whisper 错误: {e}", file=__import__('sys').stderr)
+    except Exception as e:  # noqa: BLE001
+        print(f"Whisper 错误: {e}", file=__import__("sys").stderr)
         return None
 
 

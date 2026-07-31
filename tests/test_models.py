@@ -19,10 +19,10 @@ from src.web.models import (
     TaskProgress,
     TaskStatus,
     TaskStatusResponse,
-    TranscriptMode,
-    TranscriptResult,
     TranscribeRequest,
     TranscribeResponse,
+    TranscriptMode,
+    TranscriptResult,
     TranscriptSource,
     UsageInfo,
     VideoInfoResponse,
@@ -89,11 +89,11 @@ class TestTranscribeRequest:
         """All fields set."""
         req = TranscribeRequest(
             url="https://www.bilibili.com/video/BV1Gm421W75K",
-            mode="whisper",
-            model="medium",
+            mode=TranscriptMode.whisper,
+            model=WhisperModel.medium,
             language="en",
             page=1,
-            output_format="json",
+            output_format=OutputFormat.json,
             cookie="test_cookie",
             webhook="https://example.com/callback",
         )
@@ -118,12 +118,12 @@ class TestTranscribeRequest:
     def test_invalid_model_raises(self):
         """Invalid model raises."""
         with pytest.raises(ValidationError):
-            TranscribeRequest(url="BV1xxx", model="invalid_model")
+            TranscribeRequest(url="BV1xxx", model="invalid_model")  # type: ignore[arg-type]
 
     def test_invalid_mode_raises(self):
         """Invalid mode raises."""
         with pytest.raises(ValidationError):
-            TranscribeRequest(url="BV1xxx", mode="invalid_mode")
+            TranscribeRequest(url="BV1xxx", mode="invalid_mode")  # type: ignore[arg-type]
 
     def test_invalid_page_negative(self):
         """Invalid page negative."""
@@ -132,7 +132,7 @@ class TestTranscribeRequest:
 
     def test_serialize_deserialize(self):
         """Serialize deserialize."""
-        req = TranscribeRequest(url="BV1Gm421W75K", mode="whisper", model="tiny")
+        req = TranscribeRequest(url="BV1Gm421W75K", mode=TranscriptMode.whisper, model=WhisperModel.tiny)
         data = req.model_dump(mode="json")
         assert data["url"] == "BV1Gm421W75K"
         assert data["mode"] == "whisper"
@@ -152,7 +152,7 @@ class TestTranscriptResult:
         result = TranscriptResult(
             bvid="BV1xxx",
             title="Test",
-            source="subtitle",
+            source=TranscriptSource.subtitle,
         )
         assert result.bvid == "BV1xxx"
         assert result.title == "Test"
@@ -165,7 +165,7 @@ class TestTranscriptResult:
         result = TranscriptResult(
             bvid="BV1xxx",
             title="Test",
-            source="whisper",
+            source=TranscriptSource.whisper,
             entries=2,
             subtitles=[
                 SubtitleEntry(**{"from": 0.0, "to": 3.5, "content": "你好"}),
@@ -207,9 +207,9 @@ class TestTranscribeResponse:
         """Sync response."""
         resp = TranscribeResponse(
             task_id="test_001",
-            status="completed",
+            status=TaskStatus.completed,
             mode="sync",
-            usage=UsageInfo(source="subtitle", model="", duration_seconds=0.5),
+            usage=UsageInfo(source=TranscriptSource.subtitle, model="", duration_seconds=0.5),
         )
         assert resp.status == TaskStatus.completed
         assert resp.mode == "sync"
@@ -218,7 +218,7 @@ class TestTranscribeResponse:
         """Async response."""
         resp = TranscribeResponse(
             task_id="test_002",
-            status="pending",
+            status=TaskStatus.pending,
             mode="async",
             links={"self": "/api/v1/transcribe/test_002"},
         )
@@ -233,8 +233,8 @@ class TestTaskStatusResponse:
         """Processing."""
         resp = TaskStatusResponse(
             task_id="test_001",
-            status="processing",
-            progress=TaskProgress(phase="downloading_audio", percent=50, message="下载中"),
+            status=TaskStatus.processing,
+            progress=TaskProgress(phase=ProgressPhase.downloading_audio, percent=50, message="下载中"),
         )
         assert resp.status == TaskStatus.processing
         assert resp.progress.phase == ProgressPhase.downloading_audio
@@ -244,8 +244,8 @@ class TestTaskStatusResponse:
         """Uses fixtures from conftest.py."""
         resp = TaskStatusResponse(
             task_id="test_001",
-            status="completed",
-            progress=TaskProgress(phase="completed", percent=100, message="完成"),
+            status=TaskStatus.completed,
+            progress=TaskProgress(phase=ProgressPhase.completed, percent=100, message="完成"),
             result=TranscriptResult(**sample_completed_result),
             usage=UsageInfo(**sample_usage),
         )
@@ -257,8 +257,8 @@ class TestTaskStatusResponse:
         """Failed."""
         resp = TaskStatusResponse(
             task_id="test_001",
-            status="failed",
-            progress=TaskProgress(phase="failed", percent=0, message="音频下载失败"),
+            status=TaskStatus.failed,
+            progress=TaskProgress(phase=ProgressPhase.failed, percent=0, message="音频下载失败"),
         )
         assert resp.status == TaskStatus.failed
 
@@ -295,6 +295,7 @@ class TestVideoInfoResponse:
     def test_with_pages(self):
         """With pages."""
         from src.web.models import PageInfo
+
         info = VideoInfoResponse(
             bvid="BV1xxx",
             title="Test",
@@ -336,12 +337,13 @@ class TestTaskListResponse:
     def test_with_tasks(self):
         """With tasks."""
         from src.web.models import TaskSummary
+
         task = TaskSummary(
             task_id="test_001",
-            status="completed",
+            status=TaskStatus.completed,
             mode="sync",
             url="BV1xxx",
-            progress=TaskProgress(phase="completed", percent=100, message="完成"),
+            progress=TaskProgress(phase=ProgressPhase.completed, percent=100, message="完成"),
         )
         resp = TaskListResponse(total=1, limit=20, offset=0, tasks=[task])
         assert resp.total == 1
@@ -353,14 +355,19 @@ class TestSubModels:
 
     def test_usage_info(self):
         """Usage info."""
-        usage = UsageInfo(source="whisper", model="small", duration_seconds=930.5)
+        usage = UsageInfo(source=TranscriptSource.whisper, model="small", duration_seconds=930.5)
         assert usage.source == TranscriptSource.whisper
         assert usage.real_time_factor is None
 
     def test_usage_info_with_rtf(self):
         """Usage info with rtf."""
-        usage = UsageInfo(source="whisper", model="small", duration_seconds=930.5,
-                          audio_duration=3600, real_time_factor=0.26)
+        usage = UsageInfo(
+            source=TranscriptSource.whisper,
+            model="small",
+            duration_seconds=930.5,
+            audio_duration=3600,
+            real_time_factor=0.26,
+        )
         assert usage.real_time_factor == 0.26
 
     def test_audio_info(self):
@@ -370,8 +377,9 @@ class TestSubModels:
 
     def test_progress_info(self):
         """Progress info."""
-        prog = ProgressInfo(phase="downloading_audio", percent=50, message="下载中",
-                            bytes_downloaded=1000, bytes_total=2000)
+        prog = ProgressInfo(
+            phase=ProgressPhase.downloading_audio, percent=50, message="下载中", bytes_downloaded=1000, bytes_total=2000
+        )
         assert prog.bytes_downloaded == 1000
         assert prog.percent == 50
 
@@ -381,7 +389,7 @@ class TestSerialization:
 
     def test_transcribe_request_json(self):
         """Transcribe request json."""
-        req = TranscribeRequest(url="BV1Gm421W75K", mode="whisper", model="tiny")
+        req = TranscribeRequest(url="BV1Gm421W75K", mode=TranscriptMode.whisper, model=WhisperModel.tiny)
         data = req.model_dump(mode="json")
         json_str = json.dumps(data, ensure_ascii=False)
         loaded = json.loads(json_str)

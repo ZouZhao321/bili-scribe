@@ -3,35 +3,31 @@
 from __future__ import annotations
 
 import time
+import urllib.error
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
 from src.core.bilibili import (
+    download_subtitle_json,
     extract_bvid,
     get_cid,
-    get_video_info,
     get_subtitle_url,
-    download_subtitle_json,
+    get_video_info,
 )
-
 from src.web.models import (
-    AudioInfo,
-    ErrorResponse,
     OutputFormat,
-    ProgressInfo,
-    ProgressPhase,
     SubtitleEntry,
     TaskProgress,
     TaskRequest,
     TaskStatus,
     TaskStatusResponse,
+    TranscribeRequest,
+    TranscribeResponse,
     TranscriptMode,
     TranscriptResult,
     TranscriptSource,
-    TranscribeRequest,
-    TranscribeResponse,
     UsageInfo,
     WhisperModel,
 )
@@ -74,11 +70,13 @@ def _build_subtitle_entries(subtitles: list[dict]) -> list[SubtitleEntry]:
     """
     entries = []
     for item in subtitles:
-        entries.append(SubtitleEntry(
-            from_=item.get("from", item.get("from_", 0)),
-            to=item.get("to", 0),
-            content=item.get("content", "").strip(),
-        ))
+        entries.append(
+            SubtitleEntry(
+                **{"from": item.get("from", item.get("from_", 0))},
+                to=item.get("to", 0),
+                content=item.get("content", "").strip(),
+            )
+        )
     return entries
 
 
@@ -112,15 +110,23 @@ def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
     try:
         bvid = extract_bvid(req.url)
     except SystemExit:
-        raise HTTPException(status_code=400, detail={
-            "error": "invalid_url", "message": f"无法解析 URL: {req.url}",
-        })
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_url",
+                "message": f"无法解析 URL: {req.url}",
+            },
+        )
 
     video_info = get_video_info(bvid)
     if not video_info:
-        raise HTTPException(status_code=404, detail={
-            "error": "video_not_found", "message": f"视频不存在或已删除: {bvid}",
-        })
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "video_not_found",
+                "message": f"视频不存在或已删除: {bvid}",
+            },
+        )
 
     title = video_info.get("title", bvid)
     author = video_info.get("owner", {}).get("name", "")
@@ -129,9 +135,13 @@ def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
     try:
         cid, _, total_pages = get_cid(bvid, req.page)
     except SystemExit:
-        raise HTTPException(status_code=400, detail={
-            "error": "invalid_page", "message": f"分 P 序号 {req.page} 无效",
-        })
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_page",
+                "message": f"分 P 序号 {req.page} 无效",
+            },
+        )
 
     start_time = time.time()
 
@@ -180,7 +190,7 @@ def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
                             result=result,
                             usage=usage,
                         )
-                except Exception:
+                except urllib.error.URLError:
                     continue
 
     # 未找到字幕 — 同步不可用
@@ -215,12 +225,7 @@ def _should_use_async(req: TranscribeRequest) -> bool:
         return True
 
     # Both 模式需要 Whisper
-    if req.mode == TranscriptMode.both:
-        return True
-
-    # Auto 模式：如果没有字幕则异步（将降级到 Whisper）
-    # 但此时还不知道，返回 False 让同步路径判断
-    return False
+    return req.mode == TranscriptMode.both
 
 
 @router.post("/transcribe", response_model=TranscribeResponse, status_code=status.HTTP_200_OK)
@@ -244,9 +249,13 @@ async def submit_transcribe(req: TranscribeRequest):
     try:
         bvid = extract_bvid(req.url)
     except SystemExit:
-        raise HTTPException(status_code=400, detail={
-            "error": "invalid_url", "message": f"无法解析 URL: {req.url}",
-        })
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_url",
+                "message": f"无法解析 URL: {req.url}",
+            },
+        )
 
     # 先尝试同步路径
     if not _should_use_async(req):
@@ -270,10 +279,13 @@ async def submit_transcribe(req: TranscribeRequest):
     )
 
     if not queue.enqueue(task):
-        raise HTTPException(status_code=429, detail={
-            "error": "rate_limited",
-            "message": "队列已满或相同视频已有任务在处理中",
-        })
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "rate_limited",
+                "message": "队列已满或相同视频已有任务在处理中",
+            },
+        )
 
     # 立即持久化
     storage.save(task)
@@ -315,9 +327,13 @@ async def get_task_status(task_id: str):
         task = storage.load(task_id)
 
     if task is None:
-        raise HTTPException(status_code=404, detail={
-            "error": "task_not_found", "message": f"任务不存在: {task_id}",
-        })
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "task_not_found",
+                "message": f"任务不存在: {task_id}",
+            },
+        )
 
     # 构建进度
     progress = TaskProgress(

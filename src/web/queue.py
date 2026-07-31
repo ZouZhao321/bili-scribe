@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import threading
-import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 from src.web.models import (
     OutputFormat,
@@ -17,7 +15,6 @@ from src.web.models import (
     TranscriptMode,
     WhisperModel,
 )
-
 
 # 默认任务超时时间：6 小时
 DEFAULT_TASK_TIMEOUT = 6 * 3600
@@ -40,15 +37,15 @@ class Task:
     webhook: str = ""
 
     status: TaskStatus = TaskStatus.pending
-    progress: ProgressInfo = field(default_factory=lambda: ProgressInfo(
-        phase=ProgressPhase.queued, percent=0, message="等待处理"
-    ))
+    progress: ProgressInfo = field(
+        default_factory=lambda: ProgressInfo(phase=ProgressPhase.queued, percent=0, message="等待处理")
+    )
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    result: Optional[dict] = None
-    usage: Optional[dict] = None
-    error: Optional[str] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result: dict | None = None
+    usage: dict | None = None
+    error: str | None = None
 
     def elapsed_seconds(self) -> float:
         """计算自任务创建以来经过的时间。
@@ -104,14 +101,13 @@ class TaskQueue:
             bvid = self._extract_bvid(task.url)
             if bvid:
                 for t in self._tasks.values():
-                    if t.status in (TaskStatus.pending, TaskStatus.processing):
-                        if self._extract_bvid(t.url) == bvid:
-                            return False
+                    if t.status in (TaskStatus.pending, TaskStatus.processing) and self._extract_bvid(t.url) == bvid:
+                        return False
 
             self._tasks[task.task_id] = task
             return True
 
-    def dequeue(self) -> Optional[Task]:
+    def dequeue(self) -> Task | None:
         """按 FIFO 顺序取出下一个待处理任务，并标记为处理中。
 
         返回：
@@ -130,7 +126,7 @@ class TaskQueue:
                     return task
             return None
 
-    def peek(self, task_id: str) -> Optional[Task]:
+    def peek(self, task_id: str) -> Task | None:
         """通过 ID 获取任务，不修改其状态。
 
         参数：
@@ -161,9 +157,7 @@ class TaskQueue:
             task.completed_at = datetime.now(timezone.utc)
             task.result = result
             task.usage = usage
-            task.progress = ProgressInfo(
-                phase=ProgressPhase.completed, percent=100, message="转录完成"
-            )
+            task.progress = ProgressInfo(phase=ProgressPhase.completed, percent=100, message="转录完成")
             return True
 
     def fail(self, task_id: str, error: str) -> bool:
@@ -183,14 +177,18 @@ class TaskQueue:
             task.status = TaskStatus.failed
             task.completed_at = datetime.now(timezone.utc)
             task.error = error
-            task.progress = ProgressInfo(
-                phase=ProgressPhase.failed, percent=0, message=error
-            )
+            task.progress = ProgressInfo(phase=ProgressPhase.failed, percent=0, message=error)
             return True
 
-    def update_progress(self, task_id: str, phase: ProgressPhase, percent: int, message: str,
-                        bytes_downloaded: int | None = None,
-                        bytes_total: int | None = None) -> bool:
+    def update_progress(
+        self,
+        task_id: str,
+        phase: ProgressPhase,
+        percent: int,
+        message: str,
+        bytes_downloaded: int | None = None,
+        bytes_total: int | None = None,
+    ) -> bool:
         """更新运行中任务的进度信息。
 
         参数：
@@ -209,15 +207,17 @@ class TaskQueue:
             if task is None:
                 return False
             task.progress = ProgressInfo(
-                phase=phase, percent=percent, message=message,
-                bytes_downloaded=bytes_downloaded, bytes_total=bytes_total,
+                phase=phase,
+                percent=percent,
+                message=message,
+                bytes_downloaded=bytes_downloaded,
+                bytes_total=bytes_total,
             )
             return True
 
     # ── 查询操作 ──
 
-    def list(self, status: str | None = None,
-             limit: int = 20, offset: int = 0) -> tuple[list[Task], int]:
+    def list(self, status: str | None = None, limit: int = 20, offset: int = 0) -> tuple[list[Task], int]:
         """列出任务，支持可选的状态过滤和分页。
 
         参数：
@@ -239,7 +239,7 @@ class TaskQueue:
             all_tasks.sort(key=lambda t: t.created_at, reverse=True)
 
             total = len(all_tasks)
-            paginated = all_tasks[offset:offset + limit]
+            paginated = all_tasks[offset : offset + limit]
             return paginated, total
 
     def stats(self) -> dict[str, int]:
@@ -312,6 +312,7 @@ class TaskQueue:
             找到则返回 12 位 BV ID，否则返回 None。
         """
         import re
+
         m = re.search(r"(BV[\w]{10})", url)
         return m.group(1) if m else None
 

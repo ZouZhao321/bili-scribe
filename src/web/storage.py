@@ -7,7 +7,6 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from src.web.models import (
     OutputFormat,
@@ -18,7 +17,6 @@ from src.web.models import (
     WhisperModel,
 )
 from src.web.queue import Task, TaskQueue
-
 
 # 默认存储目录
 DEFAULT_STORAGE_DIR = os.path.expanduser("~/.bilibili-api/tasks")
@@ -43,12 +41,16 @@ def _serialize_task(task: Task) -> dict:
         "model": task.model.value if isinstance(task.model, WhisperModel) else task.model,
         "language": task.language,
         "page": task.page,
-        "output_format": task.output_format.value if isinstance(task.output_format, OutputFormat) else task.output_format,
+        "output_format": task.output_format.value
+        if isinstance(task.output_format, OutputFormat)
+        else task.output_format,
         "cookie": task.cookie,
         "webhook": task.webhook,
         "status": task.status.value if isinstance(task.status, TaskStatus) else task.status,
         "progress": {
-            "phase": task.progress.phase.value if isinstance(task.progress.phase, ProgressPhase) else task.progress.phase,
+            "phase": task.progress.phase.value
+            if isinstance(task.progress.phase, ProgressPhase)
+            else task.progress.phase,
             "percent": task.progress.percent,
             "message": task.progress.message,
             "bytes_downloaded": task.progress.bytes_downloaded,
@@ -159,9 +161,9 @@ class TaskStorage:
                 with open(filepath, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except OSError as e:
-                print(f"[storage] 保存任务 {task.task_id} 失败: {e}", file=__import__('sys').stderr)
+                print(f"[storage] 保存任务 {task.task_id} 失败: {e}", file=__import__("sys").stderr)
 
-    def load(self, task_id: str) -> Optional[Task]:
+    def load(self, task_id: str) -> Task | None:
         """通过 ID 从磁盘加载单个任务。
 
         参数：
@@ -175,7 +177,7 @@ class TaskStorage:
             return None
         with self._lock:
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(filepath, encoding="utf-8") as f:
                     data = json.load(f)
                 return _deserialize_task(data)
             except (json.JSONDecodeError, KeyError):
@@ -197,7 +199,7 @@ class TaskStorage:
                     os.remove(filepath)
                 return True
         except OSError as e:
-            print(f"[storage] 删除任务 {task_id} 失败: {e}", file=__import__('sys').stderr)
+            print(f"[storage] 删除任务 {task_id} 失败: {e}", file=__import__("sys").stderr)
         return False
 
     def recover(self, queue: TaskQueue) -> int:
@@ -218,7 +220,7 @@ class TaskStorage:
         try:
             filenames = os.listdir(self._dir)
         except OSError as e:
-            print(f"[storage] 列出存储目录失败: {e}", file=__import__('sys').stderr)
+            print(f"[storage] 列出存储目录失败: {e}", file=__import__("sys").stderr)
             return 0
 
         for filename in filenames:
@@ -233,9 +235,7 @@ class TaskStorage:
             if task.status == TaskStatus.processing:
                 task.status = TaskStatus.pending
                 task.started_at = None
-                task.progress = ProgressInfo(
-                    phase=ProgressPhase.queued, percent=0, message="等待处理（重启恢复）"
-                )
+                task.progress = ProgressInfo(phase=ProgressPhase.queued, percent=0, message="等待处理（重启恢复）")
 
             # 重新添加到队列（如果存在则覆盖）
             existing = queue.peek(task_id)
@@ -257,7 +257,7 @@ class TaskStorage:
         try:
             filenames = sorted(os.listdir(self._dir))
         except OSError as e:
-            print(f"[storage] 列出存储目录失败: {e}", file=__import__('sys').stderr)
+            print(f"[storage] 列出存储目录失败: {e}", file=__import__("sys").stderr)
             return tasks
         for filename in filenames:
             if filename.endswith(".json"):

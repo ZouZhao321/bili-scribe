@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+import urllib.error
 import urllib.request
 
 from fastapi import APIRouter
@@ -36,8 +37,8 @@ def _check_bilibili_api() -> HealthCheckItem:
             if resp.status == 200:
                 return HealthCheckItem(status="ok", message="B站API可达")
         return HealthCheckItem(status="error", message=f"HTTP {resp.status}")
-    except Exception as e:
-        return HealthCheckItem(status="error", message=f"B站API不可达: {str(e)}")
+    except urllib.error.URLError as e:
+        return HealthCheckItem(status="error", message=f"B站API不可达: {e!s}")
 
 
 def _check_disk_space() -> HealthCheckItem:
@@ -51,12 +52,12 @@ def _check_disk_space() -> HealthCheckItem:
         check_path = os.path.expanduser("~/.bilibili-api")
         os.makedirs(check_path, exist_ok=True)
         stat = os.statvfs(check_path)
-        free_gb = stat.f_bavail * stat.f_frsize / (1024 ** 3)
+        free_gb = stat.f_bavail * stat.f_frsize / (1024**3)
         if free_gb < 0.1:
             return HealthCheckItem(status="error", message=f"磁盘空间不足: {free_gb:.1f}GB")
         return HealthCheckItem(status="ok", message=f"磁盘空间充足 ({free_gb:.1f}GB)")
-    except Exception as e:
-        return HealthCheckItem(status="error", message=f"磁盘检查失败: {str(e)}")
+    except OSError as e:
+        return HealthCheckItem(status="error", message=f"磁盘检查失败: {e!s}")
 
 
 @router.get("/health", response_model=HealthResponse)

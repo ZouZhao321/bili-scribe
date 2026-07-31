@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+import urllib.error
+
 from fastapi import APIRouter, HTTPException, Query
 
 from src.core.bilibili import (
-    api_get,
     extract_bvid,
-    get_video_info,
     get_cid,
     get_subtitle_url,
+    get_video_info,
 )
-
 from src.web.models import PageInfo, VideoInfoResponse
 
 router = APIRouter(tags=["video"])
@@ -60,10 +60,13 @@ async def video_info(url: str = Query(..., description="B站视频链接或BV号
 
     video_data = get_video_info(bvid)
     if not video_data:
-        raise HTTPException(status_code=404, detail={
-            "error": "video_not_found",
-            "message": f"视频不存在或已删除: {bvid}",
-        })
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "video_not_found",
+                "message": f"视频不存在或已删除: {bvid}",
+            },
+        )
 
     title = video_data.get("title", bvid)
     author = video_data.get("owner", {}).get("name", "")
@@ -81,11 +84,13 @@ async def video_info(url: str = Query(..., description="B站视频链接或BV号
     pages_data = video_data.get("pages", [])
     pages = []
     for p in pages_data:
-        pages.append(PageInfo(
-            page=p.get("page", 0),
-            part=p.get("part", ""),
-            cid=p.get("cid", 0),
-        ))
+        pages.append(
+            PageInfo(
+                page=p.get("page", 0),
+                part=p.get("part", ""),
+                cid=p.get("cid", 0),
+            )
+        )
 
     # 检查字幕可用性
     has_subtitle = False
@@ -95,7 +100,7 @@ async def video_info(url: str = Query(..., description="B站视频链接或BV号
         if sub_list:
             has_subtitle = True
             subtitle_languages = [s.get("lan_doc", s.get("lan", "unknown")) for s in sub_list]
-    except Exception:
+    except urllib.error.URLError:
         pass
 
     return VideoInfoResponse(

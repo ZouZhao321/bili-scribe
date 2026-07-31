@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from typing import Generator
+from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +24,7 @@ def api_client() -> Generator[TestClient, None, None]:
         A TestClient instance for making HTTP requests to the API.
     """
     from src.web.server import app
+
     with TestClient(app) as client:
         yield client
 
@@ -49,6 +50,7 @@ def fresh_queue():
         A TaskQueue instance with max_size=10.
     """
     from src.web.queue import TaskQueue
+
     return TaskQueue(max_size=10)
 
 
@@ -59,8 +61,9 @@ def sample_task():
     Returns:
         A Task instance with known test values.
     """
+    from src.web.models import OutputFormat, TranscriptMode, WhisperModel
     from src.web.queue import Task
-    from src.web.models import TranscriptMode, WhisperModel, OutputFormat
+
     return Task(
         task_id="test_001",
         url="BV1Gm421W75K",

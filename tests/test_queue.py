@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import time
-
-import pytest
-
-from src.web.models import TaskStatus, ProgressPhase
+from src.web.models import ProgressPhase, TaskStatus, TranscriptMode, WhisperModel
 from src.web.queue import Task, TaskQueue
 
 
@@ -33,7 +29,8 @@ class TestTask:
         assert sample_task.is_stale() is False  # not started
 
         # Force stale with 0 timeout
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
+
         sample_task.started_at = datetime.now(timezone.utc) - timedelta(seconds=10)
         assert sample_task.is_stale(timeout=0) is True  # should be stale
 
@@ -106,9 +103,7 @@ class TestTaskQueue:
         fresh_queue.enqueue(sample_task)
         fresh_queue.dequeue()
 
-        result = fresh_queue.update_progress(
-            "test_001", ProgressPhase.downloading_audio, 50, "下载中"
-        )
+        result = fresh_queue.update_progress("test_001", ProgressPhase.downloading_audio, 50, "下载中")
         assert result is True
 
         task = fresh_queue.peek("test_001")
@@ -152,9 +147,9 @@ class TestTaskQueue:
         """Max size."""
         q = TaskQueue(max_size=2)
         # Create 3 tasks
-        t1 = Task(task_id="t1", url="BV1aaa", mode="auto", model="small")
-        t2 = Task(task_id="t2", url="BV1bbb", mode="auto", model="small")
-        t3 = Task(task_id="t3", url="BV1ccc", mode="auto", model="small")
+        t1 = Task(task_id="t1", url="BV1aaa", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t2 = Task(task_id="t2", url="BV1bbb", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t3 = Task(task_id="t3", url="BV1ccc", mode=TranscriptMode.auto, model=WhisperModel.small)
 
         assert q.enqueue(t1) is True
         assert q.enqueue(t2) is True
@@ -163,8 +158,13 @@ class TestTaskQueue:
 
     def test_dedup_same_bvid(self, fresh_queue):
         """Same BV should not be enqueued twice when first is pending."""
-        t1 = Task(task_id="t1", url="BV1Gm421W75K", mode="auto", model="small")
-        t2 = Task(task_id="t2", url="https://www.bilibili.com/video/BV1Gm421W75K", mode="auto", model="small")
+        t1 = Task(task_id="t1", url="BV1Gm421W75K", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t2 = Task(
+            task_id="t2",
+            url="https://www.bilibili.com/video/BV1Gm421W75K",
+            mode=TranscriptMode.auto,
+            model=WhisperModel.small,
+        )
 
         assert fresh_queue.enqueue(t1) is True
         assert fresh_queue.enqueue(t2) is False  # duplicate
@@ -172,13 +172,13 @@ class TestTaskQueue:
 
     def test_dedup_allows_completed(self, fresh_queue):
         """Same BV should be allowed after first task completes."""
-        t1 = Task(task_id="t1", url="BV1Gm421W75K", mode="auto", model="small")
+        t1 = Task(task_id="t1", url="BV1Gm421W75K", mode=TranscriptMode.auto, model=WhisperModel.small)
         assert fresh_queue.enqueue(t1) is True
         fresh_queue.dequeue()
         fresh_queue.complete("t1", {}, {})
 
         # Now enqueue another with same BV - should work
-        t2 = Task(task_id="t2", url="BV1Gm421W75K", mode="auto", model="small")
+        t2 = Task(task_id="t2", url="BV1Gm421W75K", mode=TranscriptMode.auto, model=WhisperModel.small)
         assert fresh_queue.enqueue(t2) is True
 
     def test_list_empty(self, fresh_queue):
@@ -189,8 +189,8 @@ class TestTaskQueue:
 
     def test_list_with_tasks(self, fresh_queue):
         """List with tasks."""
-        t1 = Task(task_id="t1", url="BV1aaa", mode="auto", model="small")
-        t2 = Task(task_id="t2", url="BV1bbb", mode="auto", model="small")
+        t1 = Task(task_id="t1", url="BV1aaa", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t2 = Task(task_id="t2", url="BV1bbb", mode=TranscriptMode.auto, model=WhisperModel.small)
         fresh_queue.enqueue(t1)
         fresh_queue.enqueue(t2)
 
@@ -202,8 +202,8 @@ class TestTaskQueue:
 
     def test_list_with_status_filter(self, fresh_queue):
         """List with status filter."""
-        t1 = Task(task_id="t1", url="BV1aaa", mode="auto", model="small")
-        t2 = Task(task_id="t2", url="BV1bbb", mode="auto", model="small")
+        t1 = Task(task_id="t1", url="BV1aaa", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t2 = Task(task_id="t2", url="BV1bbb", mode=TranscriptMode.auto, model=WhisperModel.small)
         fresh_queue.enqueue(t1)
         fresh_queue.enqueue(t2)
         fresh_queue.dequeue()  # t1 becomes processing
@@ -222,7 +222,7 @@ class TestTaskQueue:
     def test_list_pagination(self, fresh_queue):
         """List pagination."""
         for i in range(5):
-            t = Task(task_id=f"t{i}", url=f"BV1{i:03d}", mode="auto", model="small")
+            t = Task(task_id=f"t{i}", url=f"BV1{i:03d}", mode=TranscriptMode.auto, model=WhisperModel.small)
             fresh_queue.enqueue(t)
 
         # First page with limit 2
@@ -251,7 +251,7 @@ class TestTaskQueue:
         assert stale[0].task_id == "test_001"
 
         # Non-stale pending tasks should not be detected
-        t2 = Task(task_id="t2", url="BV1bbb", mode="auto", model="small")
+        t2 = Task(task_id="t2", url="BV1bbb", mode=TranscriptMode.auto, model=WhisperModel.small)
         fresh_queue.enqueue(t2)
         stale = fresh_queue.detect_stale_tasks(timeout=0)
         assert len(stale) == 1  # still only t1 (t2 is pending, not processing)
@@ -265,9 +265,9 @@ class TestTaskQueue:
 
     def test_fifo_order(self, fresh_queue):
         """Tasks should be dequeued in FIFO order."""
-        t1 = Task(task_id="t1", url="BV1aaa", mode="auto", model="small")
-        t2 = Task(task_id="t2", url="BV1bbb", mode="auto", model="small")
-        t3 = Task(task_id="t3", url="BV1ccc", mode="auto", model="small")
+        t1 = Task(task_id="t1", url="BV1aaa", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t2 = Task(task_id="t2", url="BV1bbb", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t3 = Task(task_id="t3", url="BV1ccc", mode=TranscriptMode.auto, model=WhisperModel.small)
 
         fresh_queue.enqueue(t1)
         fresh_queue.enqueue(t2)

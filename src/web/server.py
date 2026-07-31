@@ -5,9 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.web.routes.health import router as health_router
-from src.web.routes.video import router as video_router
-from src.web.routes.transcribe import router as transcribe_router
 from src.web.routes.tasks import router as tasks_router
+from src.web.routes.transcribe import router as transcribe_router
+from src.web.routes.video import router as video_router
 from src.web.worker import worker
 
 
