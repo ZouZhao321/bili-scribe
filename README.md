@@ -23,7 +23,7 @@ bilibili-transcript/
 | ------ | ------ |
 | `core/` | faster-whisper 为核心的转录引擎，B 站 API 封装，三级降级策略 |
 | `cli/` | `python fetch_transcript.py` 的命令行入口，调用 core/ |
-| `shell/` | Shell 脚本，封装 CLI 实现一键保存、后台队列、cron 调度 |
+| `shell/` | Shell 脚本，封装 CLI 实现持久化队列 + cron 调度 |
 | `web/` | FastAPI 服务，提供 RESTful HTTP API，支持同步/异步模式 |
 
 ## 功能
@@ -54,29 +54,42 @@ pip install faster-whisper
 python3 fetch_transcript.py "URL" --text-only
 ```
 
-### 完整流程（自动保存音频 + 文稿 + 链接）
+### 持久化队列（推荐）
 
 ```bash
-./shell/bili_save.sh "URL" [model]
-```
+# 添加任务到队列
+python3 src/cli/bili_queue.py add "BV1xxx"
 
-输出目录 `~/bilibili-output/`：
+# 查看队列状态
+python3 src/cli/bili_queue.py status
 
-```
-bilibili-output/
-├── audio/
-│   └── BV1xxx_视频标题.m4s          # 音频文件
-└── transcripts/
-    ├── BV1xxx_视频标题.txt           # 转录文稿
-    └── BV1xxx_视频标题_link.txt      # 视频链接信息
+# 安装 cron 定时调度（每10分钟自动检查）
+python3 src/cli/bili_queue.py install-cron
+
+# 重试失败任务
+python3 src/cli/bili_queue.py retry <task_id>
+
+# 查看所有任务
+python3 src/cli/bili_queue.py list
 ```
 
 ### 模型选择
 
 ```bash
-./shell/bili_save.sh "URL" tiny     # 最快，质量一般
-./shell/bili_save.sh "URL" small    # 默认，推荐日常使用
-./shell/bili_save.sh "URL" medium   # 更准，需要更多内存
+python3 fetch_transcript.py "URL" --text-only --model tiny   # 最快，质量一般
+python3 fetch_transcript.py "URL" --text-only --model small  # 默认，推荐日常使用
+python3 fetch_transcript.py "URL" --text-only --model medium # 更准，需要更多内存
+```
+
+输出目录 `out/`：
+
+```
+out/
+├── audio/
+│   └── BV1xxx_视频标题.m4s          # 音频文件
+└── transcripts/
+    ├── BV1xxx_视频标题.txt           # 转录文稿
+    └── BV1xxx_视频标题_link.txt      # 视频链接信息
 ```
 
 | 模型 | 大小 | 速度 | 质量 | 适用场景 |
@@ -137,28 +150,13 @@ MIT
 
 项目提供 RESTful API，可通过 HTTP 调用转录功能。
 
-### 安装 API 依赖
-
-```bash
-source .venv/bin/activate
-pip install -r requirements-api.txt
-```
-
 ### 启动服务
 
 ```bash
-# 后台启动
-./shell/api.sh start
-
-# 查看状态
-./shell/api.sh status
-
-# 查看日志
-./shell/api.sh logs
-
-# 停止服务
-./shell/api.sh stop
+uvicorn src.web.server:app --host 0.0.0.0 --port 8000
 ```
+
+启动后访问 `http://localhost:8000/docs` 查看交互式 API 文档（Swagger UI）。
 
 ### API 接口
 
@@ -169,8 +167,6 @@ pip install -r requirements-api.txt
 | `GET` | `/api/v1/transcribe/:task_id` | 查询任务状态 |
 | `GET` | `/api/v1/tasks` | 列出所有任务 |
 | `GET` | `/api/v1/video/info` | 查询视频信息 |
-
-启动后访问 `http://localhost:8000/docs` 查看交互式 API 文档。
 
 ### 示例
 

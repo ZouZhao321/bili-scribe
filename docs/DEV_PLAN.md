@@ -221,13 +221,15 @@ feat(api): 实现异步任务完成后的 Webhook 回调
 ```
 docs(api): 添加 API 启动脚本和 README 文档
 
-- api.sh: start / stop / status / restart / logs 命令
+- api.sh: start / stop / status / restart / logs 命令（**已移除，改用 uvicorn 直接启动**）
 - README.md: 新增 API 使用章节
 - 包括 curl 示例
 - 包括环境变量说明
 ```
 
-**验收标准：** `./api.sh start` 启动服务，`./api.sh stop` 停止服务。
+**验收标准：** `uvicorn src.web.server:app` 启动服务。
+
+> **注：** `api.sh` 已于后续清理中移除，仅保留 `bili_queue.sh` 作为 Shell 脚本入口。API 服务直接通过 `uvicorn src.web.server:app --host 0.0.0.0 --port 8000` 启动。
 
 ---
 
@@ -268,7 +270,7 @@ bilibili-transcript/
 │       └── video.py       # GET /api/v1/video/info
 ├── fetch_transcript.py    # 核心转录（不变）
 ├── download_audio.py      # 批量下载音频（不变）
-├── api.sh                 # 启动脚本（新增）
+├── api.sh                 # 启动脚本（已移除，改用 uvicorn 直接启动）
 ├── API_DESIGN.md          # 接口设计文档
 ├── DEV_PLAN.md            # 本开发计划
 └── requirements-api.txt   # API 依赖（新增）

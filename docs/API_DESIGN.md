@@ -518,13 +518,10 @@ bilibili-transcript/
 pip install fastapi uvicorn
 
 # 启动 API 服务
-uvicorn api.server:app --host 0.0.0.0 --port 8000
-
-# 或通过项目脚本
-./api.sh start
-./api.sh stop
-./api.sh status
+uvicorn src.web.server:app --host 0.0.0.0 --port 8000
 ```
+
+> **注：** 旧版 `api.sh` 启动脚本已移除，请直接使用 `uvicorn` 命令启动。
 
 ---
 
