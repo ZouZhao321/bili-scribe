@@ -12,7 +12,7 @@ import sys
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.cli.main import main
+from src.cli.bili_queue import cli_main as main
 
 if __name__ == "__main__":
     main()

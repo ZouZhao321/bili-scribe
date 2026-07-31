@@ -26,6 +26,7 @@ import logging
 import subprocess
 import sys
 import time
+import urllib.error
 from datetime import datetime
 from pathlib import Path
 
@@ -35,7 +36,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.core.bilibili import extract_bvid, get_video_info  # noqa: E402
+from src.core.bilibili import (  # noqa: E402
+    download_audio,
+    download_subtitle_json,
+    extract_bvid,
+    get_audio_url,
+    get_cid,
+    get_subtitle_url,
+    get_video_info,
+)
+from src.core.transcriber import whisper_transcribe  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 配置
@@ -280,46 +290,64 @@ def run_transcription(url: str, model: str, task_id: str) -> dict:
     )
     (transcript_dir / f"{filename}_link.txt").write_text(link_info, encoding="utf-8")
 
-    # 6. 执行转录
+    # 6. 执行转录（三级降级）
     audio_path = audio_dir / f"{filename}.m4s"
     transcript_path = transcript_dir / f"{filename}.txt"
-    script = PROJECT_ROOT / "fetch_transcript.py"
 
+    # 获取 CID
     try:
-        proc = subprocess.run(
-            [
-                sys.executable,
-                str(script),
-                bvid,
-                "--text-only",
-                "--model",
-                model,
-                "--save-audio",
-                str(audio_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT,
-        )
-        transcript_path.write_text(proc.stdout, encoding="utf-8")
-
-        if proc.returncode == 0:
-            line_count = len(proc.stdout.strip().splitlines()) if proc.stdout.strip() else 0
-            return {
-                "success": True,
-                "bv": bvid,
-                "title": title,
-                "transcript": str(transcript_path),
-                "audio": str(audio_path) if audio_path.exists() else None,
-                "lines": line_count,
-            }
-        else:
-            return {"success": False, "error": proc.stderr.strip() or f"退出码 {proc.returncode}"}
-
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": "转录超时（6小时）"}
+        cid, _part_title, _total_pages = get_cid(bvid, 0)
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": f"获取 CID 失败: {e}"}
+
+    subtitles = []
+
+    # 第 1/2 级：CC/AI 字幕
+    try:
+        sub_list = get_subtitle_url(bvid, cid, "")
+        if sub_list:
+            cc_subs = [s for s in sub_list if not s.get("lan", "").startswith("ai")]
+            ai_subs = [s for s in sub_list if s.get("lan", "").startswith("ai")]
+            for sub in cc_subs + ai_subs:
+                try:
+                    sub_data = download_subtitle_json(sub["subtitle_url"])
+                    body = sub_data.get("body", [])
+                    if body:
+                        subtitles = body
+                        break
+                except urllib.error.URLError:
+                    continue
+    except Exception:
+        pass
+
+    # 第 3 级：Whisper 降级
+    if not subtitles:
+        try:
+            audio_url = get_audio_url(bvid, cid)
+            if audio_url:
+                referer = f"https://www.bilibili.com/video/{bvid}/"
+                download_audio(audio_url, str(audio_path), referer)
+                result = whisper_transcribe(str(audio_path), "zh", model)
+                if result:
+                    subtitles = result
+        except Exception as e:
+            return {"success": False, "error": f"Whisper 转录失败: {e}"}
+
+    if not subtitles:
+        return {"success": False, "error": "该视频没有可用字幕"}
+
+    # 7. 写入文稿
+    lines = [item.get("content", "") for item in subtitles]
+    transcript_path.write_text("\n".join(lines), encoding="utf-8")
+
+    return {
+        "success": True,
+        "bv": bvid,
+        "title": title,
+        "transcript": str(transcript_path),
+        "audio": str(audio_path) if audio_path.exists() else None,
+        "lines": len(lines),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -796,6 +824,37 @@ def main():
         "uninstall-cron": cmd_uninstall_cron,
     }
     cmd_map[args.command](args)
+
+
+# ---------------------------------------------------------------------------
+# 兼容入口（供 fetch_transcript.py / pyproject.toml 调用）
+# ---------------------------------------------------------------------------
+def cli_main():
+    """命令行转录入口，与旧 main.py 接口兼容."""
+    parser = argparse.ArgumentParser(description="获取 B 站视频字幕")
+    parser.add_argument("url", help="B 站视频链接或 BV ID")
+    parser.add_argument("--text-only", action="store_true", help="仅输出纯文本")
+    parser.add_argument("--timestamps", action="store_true", help="包含时间戳")
+    parser.add_argument("--page", type=int, default=0, help="分 P 序号（从 0 开始）")
+    parser.add_argument("--whisper", action="store_true", help="强制使用 Whisper 降级")
+    parser.add_argument("--cookie", default="", help="B 站登录 Cookie")
+    parser.add_argument("--json", action="store_true", help="输出原始 JSON")
+    parser.add_argument("--language", default="zh", help="Whisper 语言提示（默认: zh）")
+    parser.add_argument("--model", default="small", help="Whisper 模型大小")
+    parser.add_argument("--save-audio", default="", help="保存音频文件到指定路径")
+    args = parser.parse_args()
+
+    # 复用 run_transcription 获取转录结果
+    result = run_transcription(args.url, args.model, "cli")
+    if not result["success"]:
+        print(result["error"], file=sys.stderr)
+        sys.exit(1)
+
+    # 读回文稿
+    transcript_path = result.get("transcript")
+    if transcript_path:
+        text = Path(transcript_path).read_text(encoding="utf-8")
+        print(text)
 
 
 if __name__ == "__main__":
