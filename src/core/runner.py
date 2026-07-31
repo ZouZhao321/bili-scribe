@@ -66,11 +66,9 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
     safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
     filename = f"{bvid}_{safe_title}"
 
-    # 4. 确保输出目录
-    audio_dir = OUTPUT_DIR / "audio"
-    transcript_dir = OUTPUT_DIR / "transcripts"
-    audio_dir.mkdir(parents=True, exist_ok=True)
-    transcript_dir.mkdir(parents=True, exist_ok=True)
+    # 4. 创建视频专属目录 out/BV号_标题/
+    video_dir = OUTPUT_DIR / filename
+    video_dir.mkdir(parents=True, exist_ok=True)
 
     # 5. 保存链接信息
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -82,11 +80,11 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
         f"转录模型: {model}\n"
         f"转录时间: {now}\n"
     )
-    (transcript_dir / f"{filename}_link.txt").write_text(link_info, encoding="utf-8")
+    (video_dir / "视频链接.txt").write_text(link_info, encoding="utf-8")
 
     # 6. 执行转录（三级降级）
-    audio_path = audio_dir / f"{filename}.m4s"
-    transcript_path = transcript_dir / f"{filename}.txt"
+    audio_path = video_dir / "audio.m4s"
+    transcript_path = video_dir / "转录文稿.txt"
 
     # 获取 CID
     try:
