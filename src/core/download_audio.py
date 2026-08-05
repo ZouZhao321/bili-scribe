@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""CLI tool — batch download audio for videos in the out/ directory.
+"""CLI 工具 — 批量下载 out/ 目录中视频的音频。
 
-Iterates over existing video directories under out/, extracts the BV ID,
-and downloads the audio stream for each video that does not already have
-an audio.m4s file. Intended for batch audio download without re-transcribing.
+遍历 out/ 下的视频目录，提取 BV ID，
+为每个尚无 audio.m4s 的视频下载音频流。
+旨在无需重新转录的情况下批量下载音频。
 """
 
 import os
@@ -11,26 +11,25 @@ import re
 import sys
 import time
 
-# Ensure project root is on sys.path so core/ can be found
+# 确保项目根目录在 sys.path 中，以便找到 core/
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from src.core.bilibili import api_get, get_cid, get_audio_url, download_audio, HEADERS
+from src.core.bilibili import download_audio, get_audio_url, get_cid  # noqa: E402
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "out")
 OUT_DIR = os.path.abspath(OUT_DIR)
 
 
 def main():
-    """Iterate over video directories and download missing audio files.
+    """遍历视频目录，下载缺失的音频文件。
 
-    Scans the out/ directory for video subdirectories, extracts BV IDs
-    from directory names, and downloads audio.m4s for each video that
-    does not already have one. Includes a 1-second rate-limit delay
-    between requests.
+    扫描 out/ 目录下的视频子目录，从目录名中提取 BV ID，
+    为每个尚无 audio.m4s 的视频下载音频。
+    请求之间包含 1 秒的速率限制延迟。
     """
-    # Get all directories
+    # 获取所有目录
     dirs = sorted([d for d in os.listdir(OUT_DIR) if os.path.isdir(os.path.join(OUT_DIR, d))])
 
     total = len(dirs)
@@ -41,53 +40,53 @@ def main():
     for i, dir_name in enumerate(dirs):
         dir_path = os.path.join(OUT_DIR, dir_name)
 
-        # Check if audio already exists
+        # 检查音频是否已存在
         audio_path = os.path.join(dir_path, "audio.m4s")
         if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
             size_mb = os.path.getsize(audio_path) / 1024 / 1024
-            print(f"[{i+1}/{total}] ⏭ {dir_name} (已有音频 {size_mb:.1f}MB)")
+            print(f"[{i + 1}/{total}] ⏭ {dir_name} (已有音频 {size_mb:.1f}MB)")
             skipped += 1
             continue
 
-        # Extract BV number
-        m = re.match(r'(BV[a-zA-Z0-9]+)', dir_name)
+        # 提取 BV 号
+        m = re.match(r"(BV[a-zA-Z0-9]+)", dir_name)
         if not m:
-            print(f"[{i+1}/{total}] ✗ {dir_name} (无法解析BV号)")
+            print(f"[{i + 1}/{total}] ✗ {dir_name} (无法解析BV号)")
             failed += 1
             continue
         bvid = m.group(1)
 
-        print(f"[{i+1}/{total}] ▶ {dir_name}", end="", flush=True)
+        print(f"[{i + 1}/{total}] ▶ {dir_name}", end="", flush=True)
 
-        # Get CID
+        # 获取 CID
         try:
             cid, _, _ = get_cid(bvid)
         except SystemExit:
-            print(f" ✗ 获取CID失败")
+            print(" ✗ 获取CID失败")
             failed += 1
             continue
         print(f" (CID: {cid})", end="", flush=True)
 
-        # Get audio URL
+        # 获取音频 URL
         audio_url = get_audio_url(bvid, cid)
         if not audio_url:
-            print(f" ✗ 获取音频URL失败")
+            print(" ✗ 获取音频URL失败")
             failed += 1
             continue
 
-        # Download audio
+        # 下载音频
         if download_audio(audio_url, audio_path):
             size_mb = os.path.getsize(audio_path) / 1024 / 1024
             print(f" ✓ {size_mb:.1f}MB")
             success += 1
         else:
-            print(f" ✗ 下载失败")
+            print(" ✗ 下载失败")
             failed += 1
 
-        # Rate limit
+        # 速率限制
         time.sleep(1)
 
-    print(f"\n=== 完成 ===")
+    print("\n=== 完成 ===")
     print(f"成功: {success}, 跳过: {skipped}, 失败: {failed}, 总计: {total}")
 
 

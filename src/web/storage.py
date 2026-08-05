@@ -1,4 +1,4 @@
-"""Task persistence storage — saves/restores task state to disk."""
+"""任务持久化存储 — 将任务状态保存到磁盘 JSON 文件。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from src.web.models import (
     OutputFormat,
@@ -19,23 +18,21 @@ from src.web.models import (
 )
 from src.web.queue import Task, TaskQueue
 
-
-# Default storage directory
+# 默认存储目录
 DEFAULT_STORAGE_DIR = os.path.expanduser("~/.bilibili-api/tasks")
 
 
 def _serialize_task(task: Task) -> dict:
-    """Serialize a Task instance to a JSON-serializable dictionary.
+    """将 Task 实例序列化为可 JSON 序列化的字典。
 
-    Converts all enum fields to their string values and datetime fields
-    to ISO-format strings. Handles both enum instances and raw string
-    values for robustness during recovery.
+    将所有枚举字段转换为字符串值，日期时间字段转换为 ISO 格式字符串。
+    为兼容恢复过程，同时处理枚举实例和原始字符串值。
 
-    Args:
-        task: The Task instance to serialize.
+    参数：
+        task: 要序列化的 Task 实例。
 
-    Returns:
-        A dictionary suitable for JSON serialization.
+    返回：
+        适合 JSON 序列化的字典。
     """
     return {
         "task_id": task.task_id,
@@ -44,12 +41,16 @@ def _serialize_task(task: Task) -> dict:
         "model": task.model.value if isinstance(task.model, WhisperModel) else task.model,
         "language": task.language,
         "page": task.page,
-        "output_format": task.output_format.value if isinstance(task.output_format, OutputFormat) else task.output_format,
+        "output_format": task.output_format.value
+        if isinstance(task.output_format, OutputFormat)
+        else task.output_format,
         "cookie": task.cookie,
         "webhook": task.webhook,
         "status": task.status.value if isinstance(task.status, TaskStatus) else task.status,
         "progress": {
-            "phase": task.progress.phase.value if isinstance(task.progress.phase, ProgressPhase) else task.progress.phase,
+            "phase": task.progress.phase.value
+            if isinstance(task.progress.phase, ProgressPhase)
+            else task.progress.phase,
             "percent": task.progress.percent,
             "message": task.progress.message,
             "bytes_downloaded": task.progress.bytes_downloaded,
@@ -65,17 +66,16 @@ def _serialize_task(task: Task) -> dict:
 
 
 def _deserialize_task(data: dict) -> Task:
-    """Deserialize a dictionary back into a Task instance.
+    """将字典反序列化为 Task 实例。
 
-    Handles ISO-format datetime strings, string enum values, and
-    nested progress information. Falls back to sensible defaults
-    for missing optional fields.
+    处理 ISO 格式日期时间字符串、字符串枚举值和嵌套的进度信息。
+    缺失的可选字段使用合理的默认值。
 
-    Args:
-        data: A dictionary representing a serialized task.
+    参数：
+        data: 表示序列化任务的字典。
 
-    Returns:
-        A reconstructed Task instance.
+    返回：
+        重建的 Task 实例。
     """
     progress_data = data.get("progress", {})
     progress = ProgressInfo(
@@ -87,13 +87,13 @@ def _deserialize_task(data: dict) -> Task:
     )
 
     def _parse_dt(val):
-        """Parse a datetime from an ISO-format string or return as-is.
+        """从 ISO 格式字符串解析日期时间，或原样返回。
 
-        Args:
-            val: A datetime instance, ISO-format string, or None.
+        参数：
+            val: datetime 实例、ISO 格式字符串或 None。
 
-        Returns:
-            A datetime instance if parsing succeeded, or None.
+        返回：
+            解析成功则返回 datetime 实例，否则返回 None。
         """
         if isinstance(val, datetime):
             return val
@@ -126,10 +126,10 @@ def _deserialize_task(data: dict) -> Task:
 
 
 class TaskStorage:
-    """Persists task state to JSON files on disk.
+    """将任务状态持久化到磁盘的 JSON 文件中。
 
-    Each task is stored as a separate JSON file: <storage_dir>/<task_id>.json
-    On startup, all files are loaded and recovered into the queue.
+    每个任务存储为独立的 JSON 文件：<storage_dir>/<task_id>.json
+    启动时加载所有文件并恢复到队列中。
     """
 
     def __init__(self, storage_dir: str = DEFAULT_STORAGE_DIR):
@@ -138,20 +138,20 @@ class TaskStorage:
 
     @property
     def dir(self) -> str:
-        """Get the storage directory path."""
+        """获取存储目录路径。"""
         return self._dir
 
     def ensure_dir(self) -> None:
-        """Create the storage directory (and parents) if it does not exist."""
+        """创建存储目录（及父目录），如果不存在的话。"""
         Path(self._dir).mkdir(parents=True, exist_ok=True)
 
     def save(self, task: Task) -> None:
-        """Persist a single task to disk as a JSON file.
+        """将单个任务持久化到磁盘的 JSON 文件。
 
-        The file is written to <storage_dir>/<task_id>.json.
+        文件写入 <storage_dir>/<task_id>.json。
 
-        Args:
-            task: The Task instance to save.
+        参数：
+            task: 要保存的 Task 实例。
         """
         self.ensure_dir()
         filepath = os.path.join(self._dir, f"{task.task_id}.json")
@@ -161,37 +161,36 @@ class TaskStorage:
                 with open(filepath, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except OSError as e:
-                print(f"[storage] Failed to save task {task.task_id}: {e}", file=__import__('sys').stderr)
+                print(f"[storage] 保存任务 {task.task_id} 失败: {e}", file=__import__("sys").stderr)
 
-    def load(self, task_id: str) -> Optional[Task]:
-        """Load a single task from disk by its ID.
+    def load(self, task_id: str) -> Task | None:
+        """通过 ID 从磁盘加载单个任务。
 
-        Args:
-            task_id: The unique identifier of the task.
+        参数：
+            task_id: 任务的唯一标识符。
 
-        Returns:
-            The deserialized Task if found, or None.
+        返回：
+            找到则返回反序列化的 Task，否则返回 None。
         """
         filepath = os.path.join(self._dir, f"{task_id}.json")
         if not os.path.exists(filepath):
             return None
         with self._lock:
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(filepath, encoding="utf-8") as f:
                     data = json.load(f)
                 return _deserialize_task(data)
             except (json.JSONDecodeError, KeyError):
                 return None
 
     def delete(self, task_id: str) -> bool:
-        """Delete a task file from disk.
+        """从磁盘删除任务文件。
 
-        Args:
-            task_id: The unique identifier of the task to delete.
+        参数：
+            task_id: 要删除的任务的唯一标识符。
 
-        Returns:
-            True if the file was deleted, False if it did not exist
-            or deletion failed.
+        返回：
+            文件删除成功返回 True，文件不存在或删除失败返回 False。
         """
         filepath = os.path.join(self._dir, f"{task_id}.json")
         try:
@@ -200,71 +199,65 @@ class TaskStorage:
                     os.remove(filepath)
                 return True
         except OSError as e:
-            print(f"[storage] Failed to delete task {task_id}: {e}", file=__import__('sys').stderr)
+            print(f"[storage] 删除任务 {task_id} 失败: {e}", file=__import__("sys").stderr)
         return False
 
     def recover(self, queue: TaskQueue) -> int:
-        """Load all saved tasks from disk and restore them into the queue.
+        """从磁盘加载所有已保存的任务，恢复到队列中。
 
-        Completed and failed tasks are loaded for querying.
-        Pending tasks are re-queued.
-        Processing tasks are reset to pending for safe recovery.
+        已完成和失败的任务加载用于查询。
+        待处理的任务重新入队。
+        处理中的任务重置为待处理，确保安全恢复。
 
-        Args:
-            queue: The TaskQueue instance to restore tasks into.
+        参数：
+            queue: 要恢复任务的 TaskQueue 实例。
 
-        Returns:
-            The number of tasks recovered from disk.
+        返回：
+            从磁盘恢复的任务数量。
         """
         self.ensure_dir()
         recovered = 0
         try:
             filenames = os.listdir(self._dir)
         except OSError as e:
-            print(f"[storage] Failed to list storage dir: {e}", file=__import__('sys').stderr)
+            print(f"[storage] 列出存储目录失败: {e}", file=__import__("sys").stderr)
             return 0
 
         for filename in filenames:
             if not filename.endswith(".json"):
                 continue
-            task_id = filename[:-5]  # remove .json
+            task_id = filename[:-5]
             task = self.load(task_id)
             if task is None:
                 continue
 
-            # Reset processing tasks to pending for safe recovery
+            # 将处理中的任务重置为待处理，确保安全恢复
             if task.status == TaskStatus.processing:
                 task.status = TaskStatus.pending
                 task.started_at = None
-                task.progress = ProgressInfo(
-                    phase=ProgressPhase.queued, percent=0, message="等待处理（重启恢复）"
-                )
+                task.progress = ProgressInfo(phase=ProgressPhase.queued, percent=0, message="等待处理（重启恢复）")
 
-            # Re-add to queue (overwrite if exists)
-            q = queue
-            existing = q.peek(task_id)
+            # 重新添加到队列（如果存在则覆盖）
+            existing = queue.peek(task_id)
             if existing is None:
-                q.enqueue(task)
-            else:
-                # Update existing task in place (simplified)
-                pass
+                queue.enqueue(task)
 
             recovered += 1
 
         return recovered
 
     def list_files(self) -> list[str]:
-        """List all task IDs that have been persisted to disk.
+        """列出已持久化到磁盘的所有任务 ID。
 
-        Returns:
-            A sorted list of task ID strings.
+        返回：
+            排序后的任务 ID 字符串列表。
         """
         self.ensure_dir()
         tasks = []
         try:
             filenames = sorted(os.listdir(self._dir))
         except OSError as e:
-            print(f"[storage] Failed to list storage dir: {e}", file=__import__('sys').stderr)
+            print(f"[storage] 列出存储目录失败: {e}", file=__import__("sys").stderr)
             return tasks
         for filename in filenames:
             if filename.endswith(".json"):
@@ -272,5 +265,5 @@ class TaskStorage:
         return tasks
 
 
-# Global singleton
+# 全局单例
 storage = TaskStorage()

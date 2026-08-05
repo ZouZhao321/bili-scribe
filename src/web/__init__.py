@@ -1,1 +1,1 @@
-"""Bilibili Transcript API — FastAPI application package."""
+"""Bilibili Transcript API — FastAPI 应用包。"""

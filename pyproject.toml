@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = ["faster-whisper>=1.0.0", "fastapi>=0.141.0", "uvicorn>=0.52.0"]
 
 [project.scripts]
-bili-transcript = "src.core.main:main"
+bili-transcript = "src.core.runner:cli_main"
 
 [[tool.uv.index]]
 name = "tencentyun"
@@ -15,5 +15,51 @@ default = true
 
 [tool.uv]
 
+[tool.ruff]
+# 目标 Python 版本
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+# 启用的规则集
+select = [
+  "E",   # pycodestyle 错误
+  "W",   # pycodestyle 警告
+  "F",   # pyflakes
+  "I",   # isort 导入排序
+  "N",   # 命名规范
+  "UP",  # pyupgrade
+  "BLE", # 盲捕获异常
+  "SIM", # 代码简化
+  "S",   # 安全检查
+  "RUF", # ruff 特定规则
+]
+
+# 忽略的规则
+ignore = [
+  "E501",   # 行长度，由 formatter 处理
+  "N818",   # 异常命名后缀
+  "RUF001", # 全角字符（中文项目使用全角标点）
+  "RUF002", # 全角字符在 docstring 中
+  "RUF003", # 全角字符在注释中
+  "S310",   # urllib 使用（API 交互项目，需直接控制 HTTP）
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+  "S101",   # assert 在测试中允许
+  "BLE001", # 测试中允许盲捕获
+  "S110",   # try-except-pass 在测试中允许
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "tests"]
+
 [dependency-groups]
-dev = ["pytest>=9.0", "httpx>=0.28"]
+dev = ["pytest>=9.0", "httpx>=0.28", "ruff>=0.16.0"]

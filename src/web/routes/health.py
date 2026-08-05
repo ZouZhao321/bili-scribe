@@ -1,9 +1,10 @@
-"""Health check endpoint — returns queue status and component health."""
+"""健康检查端点 — 返回队列状态和组件健康检查结果。"""
 
 from __future__ import annotations
 
 import os
 import time
+import urllib.error
 import urllib.request
 
 from fastapi import APIRouter
@@ -14,17 +15,17 @@ from src.web.worker import worker
 
 router = APIRouter(tags=["health"])
 
-# Server start time
+# 服务器启动时间
 _start_time = time.time()
 
 
 def _check_bilibili_api() -> HealthCheckItem:
-    """Check whether the Bilibili API is reachable.
+    """检查 B 站 API 是否可达。
 
-    Sends a GET request to the Bilibili online status endpoint.
+    发送 GET 请求到 B 站在线状态端点。
 
-    Returns:
-        A HealthCheckItem with status 'ok' or 'error'.
+    返回：
+        包含状态 'ok' 或 'error' 的 HealthCheckItem。
     """
     try:
         req = urllib.request.Request(
@@ -36,40 +37,38 @@ def _check_bilibili_api() -> HealthCheckItem:
             if resp.status == 200:
                 return HealthCheckItem(status="ok", message="B站API可达")
         return HealthCheckItem(status="error", message=f"HTTP {resp.status}")
-    except Exception as e:
-        return HealthCheckItem(status="error", message=f"B站API不可达: {str(e)}")
+    except urllib.error.URLError as e:
+        return HealthCheckItem(status="error", message=f"B站API不可达: {e!s}")
 
 
 def _check_disk_space() -> HealthCheckItem:
-    """Check whether the storage directory has sufficient disk space.
+    """检查存储目录是否有足够的磁盘空间。
 
-    Returns:
-        A HealthCheckItem with status 'ok' or 'error'.
-        Triggers an error when free space drops below 100 MB.
+    返回：
+        包含状态 'ok' 或 'error' 的 HealthCheckItem。
+        当可用空间低于 100MB 时触发错误。
     """
     try:
-        # Check the storage directory or a reasonable fallback
         check_path = os.path.expanduser("~/.bilibili-api")
         os.makedirs(check_path, exist_ok=True)
         stat = os.statvfs(check_path)
-        free_gb = stat.f_bavail * stat.f_frsize / (1024 ** 3)
+        free_gb = stat.f_bavail * stat.f_frsize / (1024**3)
         if free_gb < 0.1:
             return HealthCheckItem(status="error", message=f"磁盘空间不足: {free_gb:.1f}GB")
         return HealthCheckItem(status="ok", message=f"磁盘空间充足 ({free_gb:.1f}GB)")
-    except Exception as e:
-        return HealthCheckItem(status="error", message=f"磁盘检查失败: {str(e)}")
+    except OSError as e:
+        return HealthCheckItem(status="error", message=f"磁盘检查失败: {e!s}")
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Return the service health status and queue statistics.
+    """返回服务健康状态和队列统计信息。
 
-    Checks the queue worker, disk space, and Bilibili API reachability.
-    Returns HTTP 200 if all components are healthy, or embeds error
-    details in the response body.
+    检查队列工作者、磁盘空间和 B 站 API 可达性。
+    所有组件健康时返回 HTTP 200，否则在响应体中包含错误详情。
 
-    Returns:
-        HealthResponse with component statuses and queue stats.
+    返回：
+        包含组件状态和队列统计的 HealthResponse。
     """
     stats = queue.stats()
     all_ok = True
@@ -83,7 +82,7 @@ async def health_check():
         bilibili_api=_check_bilibili_api(),
     )
 
-    # Check if any component is in error
+    # 检查是否有组件处于错误状态
     if checks.queue_worker.status != "ok":
         all_ok = False
     if checks.disk_space.status != "ok":

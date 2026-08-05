@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
-
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ── Enums ──
+
 
 class TranscriptMode(str, Enum):
     auto = "auto"
@@ -56,7 +56,10 @@ class TranscriptSource(str, Enum):
 
 # ── Sub-models ──
 
+
 class SubtitleEntry(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     from_: float = Field(alias="from")
     to: float
     content: str
@@ -66,8 +69,8 @@ class UsageInfo(BaseModel):
     source: TranscriptSource
     model: str = ""
     duration_seconds: float = 0
-    audio_duration: Optional[float] = None
-    real_time_factor: Optional[float] = None
+    audio_duration: float | None = None
+    real_time_factor: float | None = None
 
 
 class AudioInfo(BaseModel):
@@ -79,8 +82,8 @@ class ProgressInfo(BaseModel):
     phase: ProgressPhase
     percent: int = 0
     message: str = ""
-    bytes_downloaded: Optional[int] = None
-    bytes_total: Optional[int] = None
+    bytes_downloaded: int | None = None
+    bytes_total: int | None = None
 
 
 class PageInfo(BaseModel):
@@ -90,6 +93,7 @@ class PageInfo(BaseModel):
 
 
 # ── Request models ──
+
 
 class TranscribeRequest(BaseModel):
     url: str = Field(..., description="B站视频链接或BV号，支持 BV1xxx、av12345、b23.tv/xxx")
@@ -122,6 +126,7 @@ class TranscribeRequest(BaseModel):
 
 # ── Response models ──
 
+
 class TranscriptResult(BaseModel):
     bvid: str
     title: str
@@ -136,23 +141,22 @@ class TranscriptResult(BaseModel):
 
 
 class TranscribeResponse(BaseModel):
-
     task_id: str
     status: TaskStatus
     mode: str  # "sync" | "async"
-    estimated_seconds: Optional[int] = None
-    result: Optional[TranscriptResult] = None
-    audio: Optional[AudioInfo] = None
-    usage: Optional[UsageInfo] = None
-    links: Optional[dict[str, str]] = None
+    estimated_seconds: int | None = None
+    result: TranscriptResult | None = None
+    audio: AudioInfo | None = None
+    usage: UsageInfo | None = None
+    links: dict[str, str] | None = None
 
 
 class TaskProgress(BaseModel):
     phase: ProgressPhase
     percent: int = 0
     message: str = ""
-    bytes_downloaded: Optional[int] = None
-    bytes_total: Optional[int] = None
+    bytes_downloaded: int | None = None
+    bytes_total: int | None = None
 
 
 class TaskRequest(BaseModel):
@@ -165,12 +169,12 @@ class TaskStatusResponse(BaseModel):
     task_id: str
     status: TaskStatus
     mode: str = ""
-    created_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
     progress: TaskProgress
-    request: Optional[TaskRequest] = None
-    result: Optional[TranscriptResult] = None
-    usage: Optional[UsageInfo] = None
+    request: TaskRequest | None = None
+    result: TranscriptResult | None = None
+    usage: UsageInfo | None = None
 
 
 class TaskSummary(BaseModel):
@@ -179,8 +183,8 @@ class TaskSummary(BaseModel):
     mode: str
     url: str
     model: str = "small"
-    created_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
     progress: TaskProgress
 
 
@@ -210,10 +214,11 @@ class HealthResponse(BaseModel):
     whisper_models: list[str] = ["tiny", "base", "small", "medium", "large-v3"]
     default_model: str = "small"
     queue: dict[str, int] = {}
-    checks: Optional[HealthChecks] = None
+    checks: HealthChecks | None = None
 
 
 # ── Video info ──
+
 
 class VideoInfoResponse(BaseModel):
     bvid: str
@@ -231,19 +236,21 @@ class VideoInfoResponse(BaseModel):
 
 # ── Error ──
 
+
 class ErrorResponse(BaseModel):
     error: str
     message: str
-    details: Optional[Any] = None
+    details: Any | None = None
 
 
 # ── Webhook ──
+
 
 class WebhookPayload(BaseModel):
     event: str  # "transcription.completed" | "transcription.failed"
     task_id: str
     status: TaskStatus
-    result: Optional[TranscriptResult] = None
-    usage: Optional[UsageInfo] = None
-    error: Optional[str] = None
-    message: Optional[str] = None
+    result: TranscriptResult | None = None
+    usage: UsageInfo | None = None
+    error: str | None = None
+    message: str | None = None

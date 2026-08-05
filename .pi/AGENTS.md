@@ -11,7 +11,7 @@ B 站视频字幕提取 + Whisper 本地语音转录工具。支持 CC 字幕、
 ```
 bilibili-transcript/
 ├── src/core/       # 核心引擎 — faster-whisper 封装 + B 站 API 交互
-├── src/shell/      # Shell 脚本使用方式 — 一键保存/后台队列/cron 调度/API管理
+├── cli/            # 命令行工具集 — 持久化队列 + cron 调度
 ├── src/web/        # FastAPI 服务使用方式 — 异步队列 + 持久化 + Webhook
 ├── tests/          # 测试套件
 └── experiments/    # 实验记录
@@ -20,51 +20,36 @@ bilibili-transcript/
 | 层级 | 说明 |
 | ------ | ------ |
 | `src/core/` | faster-whisper 为核心的转录引擎，B 站 API 封装，三级降级策略 |
-| `src/shell/` | Shell 脚本，封装 CLI 实现一键保存、后台队列、cron 调度 |
+| `cli/` | Python 命令行工具，实现持久化队列 + cron 调度 |
 | `src/web/` | FastAPI 服务，提供 RESTful HTTP API，支持同步/异步模式 |
 
-## 默认工作流
+## 核心用法
 
-**所有下载和转录操作默认使用 `bili_save.sh` 保存模式**，即自动保存音频、文稿和视频链接信息到 `~/bilibili-output/` 目录。
+### 持久化队列（推荐）
 
-### 核心命令
+使用 `bili_queue.py` 管理转录任务，支持 cron 定时调度、自动重试、CPU 感知调度。
 
 ```bash
-# 后台队列模式：自动排队，可同时提交多个（推荐）
-./src/shell/bili_bg.sh "视频URL1" "视频URL2" ... [model]
+# 添加任务到队列
+python3 src/cli/bili_queue.py add "BV1xxx"
 
-# 默认流程：下载 + 转录 + 保存（前台运行）
-./src/shell/bili_save.sh "视频URL" [model]
+# 查看队列状态
+python3 src/cli/bili_queue.py status
 
-# 快速查看（不保存文件）
-./src/shell/bili.sh "视频URL" [model]
+# 安装 cron 定时调度（每10分钟自动检查）
+python3 src/cli/bili_queue.py install-cron
 
-# 直接调用 Python 脚本
+# 列出所有任务
+python3 src/cli/bili_queue.py list
+
+# 重试失败任务
+python3 src/cli/bili_queue.py retry <task_id>
+```
+
+### 直接调用 Python 脚本
+
+```bash
 python3 fetch_transcript.py "视频URL" [options]
-```
-
-### 队列管理
-
-```bash
-# 查看队列状态（运行中/已完成/失败）
-./src/shell/bili_bg.sh --status
-
-# 查看某个任务的详细日志
-./src/shell/bili_bg.sh --log <task_id>
-
-# 从文件批量提交（每行一个URL）
-./src/shell/bili_bg.sh urls.txt [model]
-```
-
-### 输出目录结构
-
-```
-~/bilibili-output/
-├── {BV号}_{适配名字}/
-│   ├── 转录文稿.txt          # 原始转录文本
-│   └── 适配分析.md           # 内容分析总结
-├── audio/                    # 音频文件（旧格式）
-└── transcripts/              # 文稿文件（旧格式）
 ```
 
 ### 模型选择
@@ -85,50 +70,7 @@ python3 fetch_transcript.py "视频URL" [options]
    - 第 1 级：CC 字幕（UP 主上传）— 秒出
    - 第 2 级：AI 字幕（B 站自动生成）— 秒出
    - 第 3 级：Whisper 本地转录（CPU）— 较慢但最可靠
-4. **保存结果**：音频 → `~/bilibili-output/audio/`，文稿 → `~/bilibili-output/transcripts/`
-
-## 常见操作
-
-### 后台排队转录（推荐）
-
-```bash
-# 单个视频后台运行
-./src/shell/bili_bg.sh "https://www.bilibili.com/video/BV1xxx"
-
-# 多个视频自动排队
-./src/shell/bili_bg.sh "BV1xxx" "BV2xxx" "BV3xxx"
-
-# 从文件批量提交
-./src/shell/bili_bg.sh urls.txt small
-
-# 查看队列状态
-./src/shell/bili_bg.sh --status
-
-# 查看任务日志
-./src/shell/bili_bg.sh --log BV1xxx_1234567890
-```
-
-### 下载并转录视频（前台）
-
-```bash
-./src/shell/bili_save.sh "https://www.bilibili.com/video/BV1xxx"
-./src/shell/bili_save.sh "BV1xxx" tiny    # 快速
-./src/shell/bili_save.sh "BV1xxx" small   # 默认
-./src/shell/bili_save.sh "BV1xxx" medium  # 高质量
-```
-
-### 仅查看文稿（不保存）
-
-```bash
-./src/shell/bili.sh "BV1xxx"
-./src/shell/bili.sh "BV1xxx" --timestamps  # 带时间戳
-```
-
-### JSON 格式输出
-
-```bash
-python3 fetch_transcript.py "BV1xxx" --json
-```
+4. **保存结果**：音频 → `out/audio/`，文稿 → `out/transcripts/`
 
 ## 注意事项
 
@@ -209,20 +151,11 @@ segments = self.generate_segments(features, ...)                    # 30秒窗�
 ### 启动服务
 
 ```bash
-# 后台启动（默认端口 8000）
-./src/shell/api.sh start
+# 直接启动（默认端口 8000）
+uvicorn src.web.server:app --host 0.0.0.0 --port 8000
 
-# 查看服务状态
-./src/shell/api.sh status
-
-# 查看实时日志
-./src/shell/api.sh logs
-
-# 停止服务
-./src/shell/api.sh stop
-
-# 自定义端口
-API_PORT=8080 ./src/shell/api.sh start
+# 或使用 Python 模块
+python3 -m uvicorn src.web.server:app --host 0.0.0.0 --port 8000
 ```
 
 启动后访问 `http://localhost:8000/docs` 查看交互式 API 文档（Swagger UI）。
@@ -260,61 +193,6 @@ curl "http://localhost:8000/api/v1/video/info?url=BV1Gm421W75K"
 curl http://localhost:8000/api/v1/health
 ```
 
-### 请求参数说明
-
-```json
-{
-  "url": "BV1Gm421W75K",           // 必填，支持 BV/av/b23.tv
-  "mode": "auto",                   // auto / subtitle / whisper / both
-  "model": "small",                 // tiny / base / small / medium / large-v3
-  "language": "zh",                 // Whisper 语言提示
-  "page": 0,                         // 分 P 序号
-  "output_format": "text",          // text / timestamps / json
-  "webhook": "https://..."          // 异步完成回调（可选）
-}
-```
-
-### 同步 vs 异步策略
-
-| 条件 | 模式 | HTTP 状态码 |
-| ------ | ------ | ----------- |
-| 有 CC/AI 字幕 | 同步 | 200，立即返回结果 |
-| 强制 `mode=whisper` | 异步 | 202，返回 task_id |
-| 模型 medium 以上 | 异步 | 202，返回 task_id |
-| 提供了 webhook | 异步 | 202，返回 task_id |
-
-### 任务状态轮询
-
-异步提交后，通过 `GET /api/v1/transcribe/:task_id` 轮询：
-
-```json
-// 处理中
-{
-  "status": "processing",
-  "progress": {
-    "phase": "downloading_audio",
-    "percent": 50,
-    "message": "正在下载音频流..."
-  }
-}
-
-// 已完成
-{
-  "status": "completed",
-  "result": {
-    "bvid": "BV1xxx",
-    "title": "视频标题",
-    "source": "whisper",
-    "entries": 120,
-    "full_text": "..."
-  },
-  "usage": {
-    "model": "small",
-    "duration_seconds": 930
-  }
-}
-```
-
 ### 项目结构
 
 ```
@@ -323,13 +201,10 @@ bilibili-transcript/
 │   ├── core/                  # 核心引擎
 │   │   ├── transcriber.py     #   faster-whisper + B站 API + CLI 入口
 │   │   └── download_audio.py  #   批量音频下载
-│   ├── shell/                 # Shell 脚本使用方式
-│   │   ├── bili_save.sh       #   一键保存音频+文稿+链接
-│   │   ├── bili.sh            #   精简包装
-│   │   ├── bili_bg.sh         #   后台队列批量处理
-│   │   ├── bili_queue.sh      #   cron 定时调度
-│   │   └── api.sh             #   API 启停管理
-│   └── web/                   # FastAPI 服务使用方式
+│   ├── cli/                   # 命令行工具
+│   │   ├── __init__.py
+│   │   └── bili_queue.py       #   持久化队列 + cron 调度
+│   └── web/                   # FastAPI 服务
 │       ├── server.py          #   FastAPI 应用入口
 │       ├── models.py          #   Pydantic 数据模型
 │       ├── queue.py           #   内存任务队列
@@ -343,14 +218,6 @@ bilibili-transcript/
 ├── docs/API_DESIGN.md         # 完整接口设计文档
 ├── fetch_transcript.py        # 兼容入口（委派到 src.core.transcriber）
 └── pyproject.toml             # 依赖定义（uv）
-```
-
-### 依赖安装
-
-```bash
-# 使用 uv 安装所有依赖（包含 API）
-uv venv
-uv pip install -e .
 ```
 
 ---

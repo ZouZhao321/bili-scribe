@@ -1,60 +1,62 @@
-"""Background transcription worker — processes tasks from the queue."""
+"""后台转录工作者 — 从队列中取出并处理任务。"""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
-from datetime import datetime, timezone
-from typing import Optional
+from typing import Any
 
-# Import core transcription logic
+# 导入核心转录逻辑
 from src.core.bilibili import (
-    HEADERS,
-    api_get,
-    extract_bvid,
-    get_cid,
-    get_video_info,
-    get_subtitle_url,
-    download_subtitle_json,
-    get_audio_url,
     download_audio,
+    download_subtitle_json,
+    extract_bvid,
+    get_audio_url,
+    get_cid,
+    get_subtitle_url,
+    get_video_info,
 )
 from src.core.transcriber import (
     whisper_transcribe,
-    format_timestamp,
 )
-
 from src.web.models import (
     OutputFormat,
     ProgressPhase,
+    TaskStatus,
     TranscriptMode,
     TranscriptSource,
-    TaskStatus,
 )
 from src.web.queue import queue
 from src.web.storage import storage
 
-
-# Check interval in seconds
+# 轮询间隔（秒）
 POLL_INTERVAL = 2.0
 
 
-def _progress(task_id: str, phase: ProgressPhase, percent: int, message: str,
-              bytes_dl: int | None = None, bytes_total: int | None = None) -> None:
-    """Update task progress and persist to disk.
+def _progress(
+    task_id: str,
+    phase: ProgressPhase,
+    percent: int,
+    message: str,
+    bytes_dl: int | None = None,
+    bytes_total: int | None = None,
+) -> None:
+    """更新任务进度并持久化到磁盘。
 
-    Args:
-        task_id: The unique identifier of the task.
-        phase: The current progress phase.
-        percent: Progress percentage (0-100).
-        message: A human-readable progress message.
-        bytes_dl: Optional bytes downloaded so far.
-        bytes_total: Optional total bytes to download.
+    参数：
+        task_id: 任务的唯一标识符。
+        phase: 当前进度阶段。
+        percent: 进度百分比（0-100）。
+        message: 人类可读的进度消息。
+        bytes_dl: 可选，已下载的字节数。
+        bytes_total: 可选，总下载字节数。
     """
     queue.update_progress(task_id, phase, percent, message, bytes_dl, bytes_total)
     task = queue.peek(task_id)
@@ -62,23 +64,30 @@ def _progress(task_id: str, phase: ProgressPhase, percent: int, message: str,
         storage.save(task)
 
 
-def _build_result(bvid: str, title: str, author: str, duration: int,
-                  source: TranscriptSource, subtitles: list[dict],
-                  total_pages: int, page: int) -> dict:
-    """Build a standardized transcription result dictionary.
+def _build_result(
+    bvid: str,
+    title: str,
+    author: str,
+    duration: int,
+    source: TranscriptSource,
+    subtitles: list[dict],
+    total_pages: int,
+    page: int,
+) -> dict:
+    """构建标准化的转录结果字典。
 
-    Args:
-        bvid: The video BV ID.
-        title: The video title.
-        author: The video author/uploader.
-        duration: Video duration in seconds.
-        source: The transcript source (subtitle or whisper).
-        subtitles: List of subtitle segment dicts.
-        total_pages: Total number of video pages/parts.
-        page: The current page number.
+    参数：
+        bvid: 视频 BV ID。
+        title: 视频标题。
+        author: 视频作者/UP主。
+        duration: 视频时长（秒）。
+        source: 转录来源（字幕或 Whisper）。
+        subtitles: 字幕片段字典列表。
+        total_pages: 视频总页数/分 P 数。
+        page: 当前页码。
 
-    Returns:
-        A dictionary with all transcription result fields.
+    返回：
+        包含所有转录结果字段的字典。
     """
     entries = len(subtitles)
 
@@ -101,18 +110,17 @@ def _build_result(bvid: str, title: str, author: str, duration: int,
     }
 
 
-def _build_usage(source: TranscriptSource, model: str, elapsed: float,
-                 audio_duration: int | None = None) -> dict:
-    """Build a standardized usage statistics dictionary.
+def _build_usage(source: TranscriptSource, model: str, elapsed: float, audio_duration: int | None = None) -> dict:
+    """构建标准化的使用统计字典。
 
-    Args:
-        source: The transcript source.
-        model: The Whisper model name (empty for subtitle source).
-        elapsed: Wall-clock time spent on transcription in seconds.
-        audio_duration: Optional audio duration for real-time factor calculation.
+    参数：
+        source: 转录来源。
+        model: Whisper 模型名称（字幕来源时为空字符串）。
+        elapsed: 转录花费的挂钟时间（秒）。
+        audio_duration: 可选，音频时长，用于计算实时因子。
 
-    Returns:
-        A dictionary with usage statistics.
+    返回：
+        包含使用统计信息的字典。
     """
     info = {
         "source": source.value,
@@ -126,45 +134,38 @@ def _build_usage(source: TranscriptSource, model: str, elapsed: float,
 
 
 def _format_subtitles(subtitles: list[dict], fmt: OutputFormat) -> list[dict]:
-    """Format subtitle segments according to the requested output format.
+    """根据请求的输出格式格式化字幕片段。
 
-    Args:
-        subtitles: Raw subtitle segment list from the transcription engine.
-        fmt: The target output format.
+    参数：
+        subtitles: 来自转录引擎的原始字幕片段列表。
+        fmt: 目标输出格式。
 
-    Returns:
-        A list of formatted subtitle dicts with 'from', 'to', and 'content' keys.
+    返回：
+        包含 'from'、'to' 和 'content' 键的格式化字幕字典列表。
     """
     if fmt == OutputFormat.json:
-        # Return raw subtitles with both from/to and content
         return [
-            {"from": s.get("from", s.get("from_", 0)),
-             "to": s.get("to", 0),
-             "content": s.get("content", "").strip()}
+            {"from": s.get("from", s.get("from_", 0)), "to": s.get("to", 0), "content": s.get("content", "").strip()}
             for s in subtitles
         ]
-    # For text and timestamps formats, return the same structure
-    # The caller (API route) will handle formatting
     return [
-        {"from": s.get("from", s.get("from_", 0)),
-         "to": s.get("to", 0),
-         "content": s.get("content", "").strip()}
+        {"from": s.get("from", s.get("from_", 0)), "to": s.get("to", 0), "content": s.get("content", "").strip()}
         for s in subtitles
     ]
 
 
 def process_task(task_id: str) -> None:
-    """Execute a single transcription task end-to-end.
+    """端到端执行单个转录任务。
 
-    Implements the three-tier fallback strategy:
-    1. CC subtitles (instant)
-    2. AI subtitles (instant)
-    3. Whisper local transcription (CPU, slower)
+    实现三级降级策略：
+    1. CC 字幕（秒出）
+    2. AI 字幕（秒出）
+    3. Whisper 本地转录（CPU，较慢）
 
-    Updates progress through each phase and persists results on completion.
+    在每个阶段更新进度，完成后持久化结果。
 
-    Args:
-        task_id: The unique identifier of the task to process.
+    参数：
+        task_id: 要处理的任务的唯一标识符。
     """
     task = queue.peek(task_id)
     if task is None:
@@ -174,27 +175,26 @@ def process_task(task_id: str) -> None:
 
     try:
         bvid = task.url
-        # Resolve URL to BV ID if needed
+        # 如果需要，将 URL 解析为 BV ID
         if not bvid.startswith("BV"):
             bvid = extract_bvid(task.url)
 
         _progress(task_id, ProgressPhase.fetching_info, 10, "正在获取视频信息")
 
-        # Get video info
+        # 获取视频信息
         video_info = get_video_info(bvid)
         title = video_info.get("title", bvid)
         author = video_info.get("owner", {}).get("name", "")
         duration = video_info.get("duration", 0)
 
-        # Get CID
-        cid, part_title, total_pages = get_cid(bvid, task.page)
+        # 获取 CID
+        cid, _part_title, total_pages = get_cid(bvid, task.page)
 
         _progress(task_id, ProgressPhase.fetching_info, 20, f"标题: {title}")
 
         subtitles = []
-        source = TranscriptSource.subtitle
 
-        # Try CC/AI subtitles first
+        # 先尝试 CC/AI 字幕
         if task.mode in (TranscriptMode.auto, TranscriptMode.subtitle, TranscriptMode.both):
             sub_list = get_subtitle_url(bvid, cid, task.cookie)
             if sub_list:
@@ -210,14 +210,12 @@ def process_task(task_id: str) -> None:
                         body = sub_data.get("body", [])
                         if body:
                             subtitles = body
-                            source = TranscriptSource.subtitle
-                            _progress(task_id, ProgressPhase.fetching_info, 40,
-                                      f"使用字幕: {len(subtitles)} 条")
+                            _progress(task_id, ProgressPhase.fetching_info, 40, f"使用字幕: {len(subtitles)} 条")
                             break
-                    except Exception:
+                    except urllib.error.URLError:
                         continue
 
-        # Whisper fallback (or forced)
+        # Whisper 降级（或强制）
         need_whisper = (
             task.mode == TranscriptMode.whisper
             or (task.mode == TranscriptMode.both and not subtitles)
@@ -241,7 +239,7 @@ def process_task(task_id: str) -> None:
                 if not download_audio(audio_url, audio_path, referer):
                     raise RuntimeError("音频下载失败")
 
-                audio_size = os.path.getsize(audio_path)
+                os.path.getsize(audio_path)
 
                 _progress(task_id, ProgressPhase.loading_model, 60, f"正在加载 Whisper 模型 ({task.model.value})")
 
@@ -254,21 +252,13 @@ def process_task(task_id: str) -> None:
                 if not whisper_result:
                     raise RuntimeError("Whisper 转录失败")
 
-                _progress(task_id, ProgressPhase.transcribing, 90,
-                          f"Whisper 完成: {len(whisper_result)} 个片段")
+                _progress(task_id, ProgressPhase.transcribing, 90, f"Whisper 完成: {len(whisper_result)} 个片段")
             finally:
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(audio_path)
-                except OSError:
-                    pass
 
-        # Combine results
-        if whisper_result and task.mode == TranscriptMode.both:
-            # both mode: use whisper as primary, note subtitle availability
-            combined = _format_subtitles(whisper_result, task.output_format)
-            final_source = TranscriptSource.whisper
-            usage_source = TranscriptSource.whisper
-        elif whisper_result:
+        # 合并结果
+        if (whisper_result and task.mode == TranscriptMode.both) or whisper_result:
             combined = _format_subtitles(whisper_result, task.output_format)
             final_source = TranscriptSource.whisper
             usage_source = TranscriptSource.whisper
@@ -280,54 +270,68 @@ def process_task(task_id: str) -> None:
         elapsed = time.time() - start_time
 
         result = _build_result(
-            bvid=bvid, title=title, author=author, duration=duration,
-            source=final_source, subtitles=combined,
-            total_pages=total_pages, page=task.page,
+            bvid=bvid,
+            title=title,
+            author=author,
+            duration=duration,
+            source=final_source,
+            subtitles=combined,
+            total_pages=total_pages,
+            page=task.page,
         )
 
         usage = _build_usage(
-            source=usage_source, model=task.model.value,
-            elapsed=elapsed, audio_duration=duration if task.mode != TranscriptMode.subtitle else None,
+            source=usage_source,
+            model=task.model.value,
+            elapsed=elapsed,
+            audio_duration=duration if task.mode != TranscriptMode.subtitle else None,
         )
 
         queue.complete(task_id, result, usage)
-        storage.save(queue.peek(task_id))
+        completed = queue.peek(task_id)
+        if completed:
+            storage.save(completed)
 
         _progress(task_id, ProgressPhase.completed, 100, "转录完成")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         elapsed = time.time() - start_time
         error_msg = str(e)
-        print(f"[worker] Task {task_id} failed after {elapsed:.1f}s: {error_msg}", file=sys.stderr)
+        print(f"[worker] 任务 {task_id} 在 {elapsed:.1f} 秒后失败: {error_msg}", file=sys.stderr)
         queue.fail(task_id, error_msg)
-        storage.save(queue.peek(task_id))
+        failed = queue.peek(task_id)
+        if failed:
+            storage.save(failed)
 
 
 def _fire_webhook(task_id: str) -> None:
-    """Send a webhook callback for a completed or failed task.
+    """为已完成或失败的任务发送 webhook 回调。
 
-    Retries up to 3 times with exponential backoff (2s, 4s, 8s).
-    The callback payload includes the transcription result or error.
+    最多重试 3 次，使用指数退避（2 秒、4 秒、8 秒）。
+    回调负载包含转录结果或错误信息。
 
-    Args:
-        task_id: The unique identifier of the completed/failed task.
+    参数：
+        task_id: 已完成/失败的任务的唯一标识符。
     """
     task = queue.peek(task_id)
     if not task or not task.webhook:
         return
 
-    payload = {
+    payload: dict[str, Any] = {
         "event": f"transcription.{task.status.value}",
         "task_id": task.task_id,
         "status": task.status.value,
     }
 
     if task.status == TaskStatus.completed:
-        payload["result"] = task.result
-        payload["usage"] = task.usage
+        if task.result:
+            payload["result"] = task.result
+        if task.usage:
+            payload["usage"] = task.usage
     elif task.status == TaskStatus.failed:
-        payload["error"] = task.error
-        payload["message"] = task.error
+        if task.error:
+            payload["error"] = task.error
+            payload["message"] = task.error
 
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
@@ -341,91 +345,95 @@ def _fire_webhook(task_id: str) -> None:
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
-                print(f"[worker] Webhook sent to {task.webhook}: {resp.status}", file=sys.stderr)
-                return  # success
-        except Exception as e:
+                print(f"[worker] Webhook 已发送到 {task.webhook}: {resp.status}", file=sys.stderr)
+                return
+        except urllib.error.URLError as e:
             if attempt < max_retries:
-                print(f"[worker] Webhook attempt {attempt}/{max_retries} failed for {task_id}: {e}, retrying...", file=sys.stderr)
-                time.sleep(2 ** attempt)  # exponential backoff
+                print(
+                    f"[worker] Webhook 第 {attempt}/{max_retries} 次尝试失败 ({task_id}): {e}，重试中...",
+                    file=sys.stderr,
+                )
+                time.sleep(2**attempt)
             else:
-                print(f"[worker] Webhook failed for {task_id} after {max_retries} attempts: {e}", file=sys.stderr)
+                print(f"[worker] Webhook 发送失败 ({task_id})，已重试 {max_retries} 次: {e}", file=sys.stderr)
 
 
 class Worker:
-    """Background worker that processes tasks from the queue.
+    """后台工作者，从队列中取出并处理任务。
 
-    Runs in a single daemon thread to avoid Whisper model conflicts.
+    在单个守护线程中运行，避免 Whisper 模型冲突。
     """
 
     def __init__(self):
-        """Initialize the worker with no running thread."""
-        self._thread: Optional[threading.Thread] = None
+        """初始化工作者，不启动线程。"""
+        self._thread: threading.Thread | None = None
         self._running = False
 
     def start(self) -> None:
-        """Start the background worker thread.
+        """启动后台工作者线程。
 
-        Starts a single daemon thread that polls the queue for pending
-        tasks. Safe to call multiple times — subsequent calls are no-ops.
+        启动单个守护线程，轮询队列中的待处理任务。
+        多次调用安全——后续调用无操作。
         """
         if self._running:
             return
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name="transcribe-worker")
         self._thread.start()
-        print("[worker] Started", file=sys.stderr)
+        print("[worker] 已启动", file=sys.stderr)
 
     def stop(self) -> None:
-        """Signal the worker to stop after completing the current task.
+        """通知工作者在完成当前任务后停止。
 
-        Sets the running flag to False; the worker loop will exit at
-        the next iteration.
+        将运行标志设置为 False；工作循环将在下一次迭代时退出。
         """
         self._running = False
-        print("[worker] Stopping...", file=sys.stderr)
+        print("[worker] 正在停止...", file=sys.stderr)
 
     @property
     def is_running(self) -> bool:
-        """Check whether the worker thread is currently active."""
+        """检查工作者线程当前是否活跃。"""
         return self._running
 
     def _run(self) -> None:
-        """Main worker loop — polls the queue and processes tasks.
+        """主工作循环 — 轮询队列并处理任务。
 
-        Runs indefinitely until stop() is called. At each iteration:
-        1. Detects and fails stale tasks.
-        2. Dequeues the next pending task.
-        3. Processes it via process_task().
-        4. Fires the webhook callback if configured.
+        无限运行直到调用 stop()。每次迭代：
+        1. 检测并标记僵死任务为失败。
+        2. 取出下一个待处理任务。
+        3. 通过 process_task() 处理。
+        4. 如果配置了 webhook，则触发回调。
         """
         while self._running:
             try:
-                # Check for stale tasks
+                # 检查僵死任务
                 stale = queue.detect_stale_tasks()
                 for task in stale:
-                    print(f"[worker] Stale task detected: {task.task_id}", file=sys.stderr)
+                    print(f"[worker] 检测到僵死任务: {task.task_id}", file=sys.stderr)
                     queue.fail(task.task_id, "转录超时")
-                    storage.save(queue.peek(task.task_id))
+                    stale_task = queue.peek(task.task_id)
+                    if stale_task:
+                        storage.save(stale_task)
 
-                # Dequeue next task
+                # 取出下一个任务
                 task = queue.dequeue()
                 if task is None:
                     time.sleep(POLL_INTERVAL)
                     continue
 
                 task_id = task.task_id
-                print(f"[worker] Processing: {task_id} (url={task.url}, mode={task.mode})", file=sys.stderr)
+                print(f"[worker] 正在处理: {task_id} (url={task.url}, mode={task.mode})", file=sys.stderr)
 
-                # Process
+                # 处理
                 process_task(task_id)
 
-                # Fire webhook if configured
+                # 如果配置了 webhook，则触发
                 _fire_webhook(task_id)
 
-            except Exception as e:
-                print(f"[worker] Unexpected error: {e}", file=sys.stderr)
+            except Exception as e:  # noqa: BLE001
+                print(f"[worker] 意外错误: {e}", file=sys.stderr)
                 time.sleep(POLL_INTERVAL)
 
 
-# Global singleton
+# 全局单例
 worker = Worker()
