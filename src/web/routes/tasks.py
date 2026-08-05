@@ -6,7 +6,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.models import (
+from src.web.models import (
     OutputFormat,
     TaskListResponse,
     TaskProgress,
@@ -14,8 +14,8 @@ from api.models import (
     TaskSummary,
     WhisperModel,
 )
-from api.queue import queue
-from api.storage import storage
+from src.web.queue import queue
+from src.web.storage import storage
 
 router = APIRouter(tags=["tasks"])
 
@@ -26,7 +26,16 @@ async def list_tasks(
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
     offset: int = Query(0, ge=0, description="分页偏移"),
 ):
-    """List all transcription tasks with optional status filter and pagination."""
+    """List all transcription tasks with optional status filter and pagination.
+
+    Args:
+        status: Optional filter by task status.
+        limit: Maximum number of tasks per page (1-100).
+        offset: Number of tasks to skip for pagination.
+
+    Returns:
+        TaskListResponse with total count and task summaries.
+    """
     tasks, total = queue.list(status=status, limit=limit, offset=offset)
 
     summaries = []

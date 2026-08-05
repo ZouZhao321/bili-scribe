@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from fetch_transcript import (
+from src.core.bilibili import (
     extract_bvid,
     get_cid,
     get_video_info,
@@ -16,7 +16,7 @@ from fetch_transcript import (
     download_subtitle_json,
 )
 
-from api.models import (
+from src.web.models import (
     AudioInfo,
     ErrorResponse,
     OutputFormat,
@@ -35,9 +35,9 @@ from api.models import (
     UsageInfo,
     WhisperModel,
 )
-from api.queue import Task, queue
-from api.storage import storage
-from api.worker import worker
+from src.web.queue import Task, queue
+from src.web.storage import storage
+from src.web.worker import worker
 
 router = APIRouter(tags=["transcribe"])
 
@@ -46,14 +46,32 @@ SYNC_CAPABLE_MODELS = {WhisperModel.tiny, WhisperModel.base, WhisperModel.small}
 
 
 def _generate_task_id(bvid: str) -> str:
-    """Generate a unique task ID."""
+    """Generate a unique task identifier.
+
+    Format: YYYYMMDD_HHMMSS_BVID_shortuuid
+
+    Args:
+        bvid: The video BV ID to embed in the task ID.
+
+    Returns:
+        A unique task ID string.
+    """
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     short_uuid = uuid.uuid4().hex[:6]
     return f"{ts}_{bvid}_{short_uuid}"
 
 
 def _build_subtitle_entries(subtitles: list[dict]) -> list[SubtitleEntry]:
-    """Convert raw subtitle dicts to SubtitleEntry models."""
+    """Convert raw subtitle dictionaries to SubtitleEntry models.
+
+    Handles both 'from' and 'from_' keys for compatibility.
+
+    Args:
+        subtitles: List of raw subtitle segment dicts.
+
+    Returns:
+        A list of SubtitleEntry model instances.
+    """
     entries = []
     for item in subtitles:
         entries.append(SubtitleEntry(
@@ -65,15 +83,33 @@ def _build_subtitle_entries(subtitles: list[dict]) -> list[SubtitleEntry]:
 
 
 def _build_full_text(subtitles: list[dict]) -> str:
-    """Build full text from subtitle entries."""
+    """Concatenate subtitle content into a single plain-text string.
+
+    Args:
+        subtitles: List of subtitle segment dicts with 'content' keys.
+
+    Returns:
+        A single string with each subtitle on a new line.
+    """
     return "\n".join(item.get("content", "").strip() for item in subtitles if item.get("content"))
 
 
 def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
-    """Try to transcribe synchronously (subtitle-only path).
+    """Attempt to transcribe a video synchronously using subtitles only.
 
-    Returns None if sync is not possible (no subtitles), which means
-    the caller should fall back to async.
+    If the video has CC or AI subtitles, the result is returned immediately.
+    Returns None when no subtitles are available, signaling the caller to
+    fall back to asynchronous Whisper transcription.
+
+    Args:
+        req: The transcription request.
+
+    Returns:
+        A TranscribeResponse with the subtitle result, or None if
+        synchronous transcription is not possible.
+
+    Raises:
+        HTTPException: If the URL is invalid or the video is not found.
     """
     try:
         bvid = extract_bvid(req.url)
@@ -154,7 +190,20 @@ def _try_sync_transcribe(req: TranscribeRequest) -> TranscribeResponse | None:
 
 
 def _should_use_async(req: TranscribeRequest) -> bool:
-    """Determine if this request should be processed asynchronously."""
+    """Determine whether a request should be processed asynchronously.
+
+    Async mode is used when:
+    - mode is 'whisper' (forced Whisper)
+    - model is medium or larger (too slow for sync)
+    - webhook is provided (explicit async callback)
+    - mode is 'both' (requires Whisper)
+
+    Args:
+        req: The transcription request.
+
+    Returns:
+        True if the request should be processed asynchronously.
+    """
     # Explicit async mode
     if req.mode == TranscriptMode.whisper:
         return True
@@ -181,8 +230,18 @@ def _should_use_async(req: TranscribeRequest) -> bool:
 async def submit_transcribe(req: TranscribeRequest):
     """Submit a transcription task.
 
-    For videos with subtitles: returns result immediately (sync, 200).
-    For videos requiring Whisper: enqueues task and returns 202.
+    For videos with subtitles: returns the result immediately (sync, 200).
+    For videos requiring Whisper: enqueues the task and returns 202.
+
+    Args:
+        req: The transcription request body.
+
+    Returns:
+        TranscribeResponse with the result (sync) or task ID (async).
+
+    Raises:
+        HTTPException 400: If the URL is invalid.
+        HTTPException 429: If the queue is full or duplicate BV.
     """
     # Validate URL by trying to extract BV ID
     try:
@@ -234,14 +293,24 @@ async def submit_transcribe(req: TranscribeRequest):
             task_id=task_id,
             status=TaskStatus.pending,
             mode="async",
-            _links={"self": f"/api/v1/transcribe/{task_id}"},
+            links={"self": f"/api/v1/transcribe/{task_id}"},
         ).model_dump(mode="json"),
     )
 
 
 @router.get("/transcribe/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
-    """Get transcription task status and result."""
+    """Get the status and result of a transcription task.
+
+    Args:
+        task_id: The unique identifier of the task.
+
+    Returns:
+        TaskStatusResponse with progress, result, and usage info.
+
+    Raises:
+        HTTPException 404: If the task does not exist.
+    """
     task = queue.peek(task_id)
 
     # If not in memory, try loading from disk

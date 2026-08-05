@@ -8,9 +8,9 @@ import urllib.request
 
 from fastapi import APIRouter
 
-from api.models import HealthCheckItem, HealthChecks, HealthResponse
-from api.queue import queue
-from api.worker import worker
+from src.web.models import HealthCheckItem, HealthChecks, HealthResponse
+from src.web.queue import queue
+from src.web.worker import worker
 
 router = APIRouter(tags=["health"])
 
@@ -19,7 +19,13 @@ _start_time = time.time()
 
 
 def _check_bilibili_api() -> HealthCheckItem:
-    """Check if Bilibili API is reachable."""
+    """Check whether the Bilibili API is reachable.
+
+    Sends a GET request to the Bilibili online status endpoint.
+
+    Returns:
+        A HealthCheckItem with status 'ok' or 'error'.
+    """
     try:
         req = urllib.request.Request(
             "https://api.bilibili.com/x/web-interface/online",
@@ -35,7 +41,12 @@ def _check_bilibili_api() -> HealthCheckItem:
 
 
 def _check_disk_space() -> HealthCheckItem:
-    """Check if there's enough disk space."""
+    """Check whether the storage directory has sufficient disk space.
+
+    Returns:
+        A HealthCheckItem with status 'ok' or 'error'.
+        Triggers an error when free space drops below 100 MB.
+    """
     try:
         # Check the storage directory or a reasonable fallback
         check_path = os.path.expanduser("~/.bilibili-api")
@@ -51,7 +62,15 @@ def _check_disk_space() -> HealthCheckItem:
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Return service health status and queue statistics."""
+    """Return the service health status and queue statistics.
+
+    Checks the queue worker, disk space, and Bilibili API reachability.
+    Returns HTTP 200 if all components are healthy, or embeds error
+    details in the response body.
+
+    Returns:
+        HealthResponse with component statuses and queue stats.
+    """
     stats = queue.stats()
     all_ok = True
 

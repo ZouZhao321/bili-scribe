@@ -104,6 +104,17 @@ class TranscribeRequest(BaseModel):
     @field_validator("url")
     @classmethod
     def url_not_empty(cls, v: str) -> str:
+        """Validate that the URL field is not empty or whitespace-only.
+
+        Args:
+            v: The input URL string.
+
+        Returns:
+            The trimmed URL string.
+
+        Raises:
+            ValueError: If the URL is empty or whitespace-only.
+        """
         if not v.strip():
             raise ValueError("url 不能为空")
         return v.strip()
@@ -125,6 +136,7 @@ class TranscriptResult(BaseModel):
 
 
 class TranscribeResponse(BaseModel):
+
     task_id: str
     status: TaskStatus
     mode: str  # "sync" | "async"
@@ -132,7 +144,7 @@ class TranscribeResponse(BaseModel):
     result: Optional[TranscriptResult] = None
     audio: Optional[AudioInfo] = None
     usage: Optional[UsageInfo] = None
-    _links: Optional[dict[str, str]] = None
+    links: Optional[dict[str, str]] = None
 
 
 class TaskProgress(BaseModel):

@@ -1,0 +1,1 @@
+"""Bilibili Transcript API — FastAPI application package."""
