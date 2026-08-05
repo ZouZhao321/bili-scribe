@@ -191,41 +191,6 @@ bash experiments/2026-07-30_whisper-memory-benchmark/verify.sh check
 
 详见 [experiments/README.md](../experiments/README.md)
 
-### 项目结构
-
-```
-bili-scribe/
-├── src/
-│   ├── core/                  # 核心引擎
-│   │   ├── transcriber.py     #   faster-whisper 转录引擎
-│   │   ├── bilibili.py        #   B 站 API 交互层（含 get_collection_info）
-│   │   ├── runner.py          #   转录执行编排（三级降级）
-│   │   ├── queue_store.py     #   队列持久化存储
-│   │   └── download_audio.py  #   批量音频下载
-│   ├── cli/                   # 统一 CLI 入口
-│   │   ├── __init__.py
-│   │   ├── main.py            #   bili-scribe 统一入口
-│   │   └── bili_queue.py      #   队列管理子命令
-│   └── web/                   # FastAPI 服务（备用）
-│       ├── server.py          #   FastAPI 应用入口
-│       ├── models.py          #   Pydantic 数据模型
-│       ├── queue.py           #   内存任务队列
-│       ├── worker.py          #   后台转录工作者
-│       ├── storage.py         #   任务持久化 (JSON)
-│       └── routes/
-│           ├── health.py      #   GET /api/v1/health
-│           ├── transcribe.py  #   POST + GET /api/v1/transcribe
-│           ├── tasks.py       #   GET /api/v1/tasks
-│           └── video.py       #   GET /api/v1/video/info
-├── docs/API_DESIGN.md         # 完整接口设计文档
-├── docs/adr/                  # 架构决策记录
-├── experiments/               # 实验记录
-├── scripts/                   # 辅助脚本（本地，不上传）
-│   └── push.sh                #   推送中转脚本
-├── .env                       # 环境变量（本地，不上传）
-└── pyproject.toml             # 依赖定义（uv）
-```
-
 ### 调度策略
 
 - **CPU 感知**：CPU 使用率 < 50% 时自动取任务执行
