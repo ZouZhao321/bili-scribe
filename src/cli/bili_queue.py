@@ -16,6 +16,10 @@
 调度策略:
     - CPU 占用率 < 50% → 自动取任务执行
     - CPU 占用率 ≥ 50% → 跳过，下次再检查
+    - 可用内存 ≥ 模型需求的 90% → 自动取任务执行
+    - 可用内存 < 模型需求的 90% → 跳过，避免 OOM
+    - 可用内存 ≥ 模型需求的 90% → 自动取任务执行
+    - 可用内存 < 模型需求的 90% → 跳过，避免 OOM
     - 失败自动重试，最多 3 次
     - 任务运行超 6 小时视为僵死，放回队列重试
 """
@@ -39,11 +43,14 @@ from src.core.queue_store import (  # noqa: E402
     GREEN,
     LOG_FILE,
     MAX_RETRIES,
+    MEMORY_THRESHOLD,
+    MODEL_MEMORY_REQUIREMENTS,
     NC,
     RED,
     YELLOW,
     FileLock,
     TaskStore,
+    get_available_memory_mb,
     get_cpu_usage,
     logger,
 )
@@ -153,6 +160,20 @@ def cmd_cron(_args):
         url = task["url"]
         model = task.get("model", "small")
 
+        # 内存检查
+        mem_avail = get_available_memory_mb()
+        mem_required = MODEL_MEMORY_REQUIREMENTS.get(model, 2000)
+        mem_needed = int(mem_required * MEMORY_THRESHOLD)
+        if mem_avail < mem_needed:
+            logger.info(
+                "内存不足: 可用 %dMB < 需要 %dMB (模型 %s)，跳过任务 %s",
+                mem_avail,
+                mem_needed,
+                model,
+                task_id,
+            )
+            return
+
         # 标记运行中
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         store.update(task_id, status="running", started_at=now)
@@ -239,6 +260,19 @@ def cmd_status(_args):
     # CPU
     cpu_color = GREEN if cpu <= CPU_THRESHOLD else RED
     print(f"  ⚡ CPU: {cpu_color}{cpu}%{NC} (阈值 {CPU_THRESHOLD}%)")
+
+    # 内存
+    mem_avail = get_available_memory_mb()
+    if running_id:
+        running_task = store.get(running_id)
+        model = running_task.get("model", "?") if running_task else "?"
+        mem_req = MODEL_MEMORY_REQUIREMENTS.get(model, 0)
+        mem_color = GREEN if mem_avail >= mem_req else RED
+        print(
+            f"  🧠 内存: 可用 {mem_avail}MB | 当前模型 {model} 需要 {mem_req}MB ({mem_color}{'充足' if mem_avail >= mem_req else '不足'}{NC})"
+        )
+    else:
+        print(f"  🧠 内存: 可用 {mem_avail}MB")
     print()
 
     # 最近日志
@@ -256,11 +290,14 @@ def cmd_status(_args):
 
     # 提示
     if pending > 0 and not running_id:
-        if cpu <= CPU_THRESHOLD:
-            print(f"  {GREEN}💡 CPU 空闲，队列有 {pending} 个任务待处理{NC}")
+        mem_ok = mem_avail >= MODEL_MEMORY_REQUIREMENTS.get("small", 2000)
+        if cpu <= CPU_THRESHOLD and mem_ok:
+            print(f"  {GREEN}💡 CPU 空闲 + 内存充足，队列有 {pending} 个任务待处理{NC}")
             print("     cron 将在 1 分钟内自动开始处理")
-        else:
+        elif cpu > CPU_THRESHOLD:
             print(f"  {YELLOW}💡 队列有 {pending} 个任务，CPU {cpu}% 繁忙，等待中...{NC}")
+        else:
+            print(f"  {RED}💡 队列有 {pending} 个任务，但内存不足 (可用 {mem_avail}MB)，等待中...{NC}")
 
 
 def cmd_list(args):
