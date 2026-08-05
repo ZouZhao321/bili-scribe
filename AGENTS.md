@@ -12,18 +12,19 @@ B 站视频字幕提取 + Whisper 本地语音转录工具。支持 CC 字幕、
 bili-scribe/
 ├── src/core/       # 核心引擎 — faster-whisper 封装 + B 站 API 交互
 ├── src/cli/        # 统一 CLI 入口 — bili-scribe 命令
-├── src/web/        # FastAPI 服务 — 异步队列 + 持久化 + Webhook
+├── src/web/        # FastAPI 服务（备用，当前主要使用 CLI）
 ├── tests/          # 测试套件
 ├── experiments/    # 实验记录
 ├── docs/           # 文档
-└── scripts/        # 辅助脚本
+├── scripts/        # 辅助脚本（本地，不上传）
+└── .env            # 环境变量（本地，不上传）
 ```
 
 | 层级 | 说明 |
 | ------ | ------ |
 | `src/core/` | faster-whisper 为核心的转录引擎，B 站 API 封装，三级降级策略 |
 | `src/cli/` | 统一 CLI 入口 `bili-scribe`，多子命令结构 |
-| `src/web/` | FastAPI 服务，提供 RESTful HTTP API，支持同步/异步模式 |
+| `scripts/` | 本地辅助脚本，被 `.gitignore` 忽略 |
 
 ## 核心用法
 
@@ -33,7 +34,6 @@ bili-scribe/
 bili-scribe transcribe <url>    # 转录单个视频
 bili-scribe queue <subcommand>  # 持久化队列管理
 bili-scribe batch <url>         # 批量下载合集
-bili-scribe serve               # 启动 API 服务
 bili-scribe info <url>          # 查询视频信息
 bili-scribe version             # 显示版本
 ```
@@ -68,6 +68,22 @@ bili-scribe queue clear [pending|failed]
 # 查看当前任务列表（从队列读取，非硬编码）
 bili-scribe queue list
 ```
+
+### GitHub 推送工作流
+
+通过远程服务器中转推送到 GitHub，所有操作预定义在 `scripts/push.sh` 中：
+
+```bash
+# 推送分支到 GitHub
+./scripts/push.sh push <branch>
+
+# 从文件读取内容更新 PR 描述
+./scripts/push.sh pr-update <pr-number> <body-file>
+```
+
+**流程**：`本地 → SSH → 服务器 bare repo → post-receive 钩子 → GitHub`
+
+**凭证管理**：所有凭证存储在 `.env` 中，被 `.gitignore` 忽略，不上传。
 
 ### 模型选择
 
@@ -182,7 +198,7 @@ bili-scribe/
 ├── src/
 │   ├── core/                  # 核心引擎
 │   │   ├── transcriber.py     #   faster-whisper 转录引擎
-│   │   ├── bilibili.py        #   B 站 API 交互层
+│   │   ├── bilibili.py        #   B 站 API 交互层（含 get_collection_info）
 │   │   ├── runner.py          #   转录执行编排（三级降级）
 │   │   ├── queue_store.py     #   队列持久化存储
 │   │   └── download_audio.py  #   批量音频下载
@@ -190,7 +206,7 @@ bili-scribe/
 │   │   ├── __init__.py
 │   │   ├── main.py            #   bili-scribe 统一入口
 │   │   └── bili_queue.py      #   队列管理子命令
-│   └── web/                   # FastAPI 服务
+│   └── web/                   # FastAPI 服务（备用）
 │       ├── server.py          #   FastAPI 应用入口
 │       ├── models.py          #   Pydantic 数据模型
 │       ├── queue.py           #   内存任务队列
@@ -204,7 +220,8 @@ bili-scribe/
 ├── docs/API_DESIGN.md         # 完整接口设计文档
 ├── docs/adr/                  # 架构决策记录
 ├── experiments/               # 实验记录
-├── scripts/                   # 辅助脚本
+├── scripts/                   # 辅助脚本（本地，不上传）
+│   └── push.sh                #   推送中转脚本
 ├── .env                       # 环境变量（本地，不上传）
 └── pyproject.toml             # 依赖定义（uv）
 ```
