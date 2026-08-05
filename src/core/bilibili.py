@@ -215,3 +215,39 @@ def download_audio(audio_url: str, output_path: str, referer: str = "") -> bool:
     except (urllib.error.URLError, OSError) as e:
         print(f"下载错误: {e}", file=sys.stderr)
         return False
+
+
+def get_collection_info(bvid: str) -> dict | None:
+    """获取视频所属合集 (ugc_season) 信息.
+
+    参数:
+        bvid: 视频 BV ID
+
+    返回:
+        包含 title/cover/ep_count/videos 的字典，非合集视频返回 None.
+    """
+    info = get_video_info(bvid)
+    season = info.get("ugc_season")
+    if not season:
+        return None
+
+    title = season.get("title", "未命名合集")
+    cover = season.get("cover", "")
+    ep_count = season.get("ep_count", 0)
+
+    videos = []
+    for section in season.get("sections", []):
+        for ep in section.get("episodes", []):
+            videos.append({
+                "bvid": ep.get("bvid", ""),
+                "title": ep.get("title", ""),
+                "aid": ep.get("aid", 0),
+                "cid": ep.get("cid", 0),
+            })
+
+    return {
+        "title": title,
+        "cover": cover,
+        "ep_count": ep_count,
+        "videos": videos,
+    }
