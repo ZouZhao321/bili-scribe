@@ -18,17 +18,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Environment Variables
-.env
-.env.*
-
-# Scripts (local helpers, not tracked)
-scripts/*.sh
-
 # Output
 out/_read_out.py
 out/
 library/
 
-# Temp files (not tracked)
-temp/
+.env
+.env.*
