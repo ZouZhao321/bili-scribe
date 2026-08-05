@@ -8,14 +8,6 @@ dependencies = ["faster-whisper>=1.0.0", "fastapi>=0.141.0", "uvicorn>=0.52.0"]
 [project.scripts]
 bili-scribe = "src.cli.main:main"
 
-# 兼容旧入口
-bili-transcript = "src.core.runner:cli_main"
-
-[[tool.uv.index]]
-name = "tencentyun"
-url = "http://mirrors.tencentyun.com/pypi/simple"
-default = true
-
 [tool.uv]
 
 [tool.ruff]

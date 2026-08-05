@@ -1,4 +1,4 @@
-# Bilibili Transcript — Pi Agent 配置
+# bili-scribe — Pi Agent 配置
 
 ## 项目概述
 
@@ -9,47 +9,64 @@ B 站视频字幕提取 + Whisper 本地语音转录工具。支持 CC 字幕、
 项目按 **核心引擎 → 使用方式** 分层组织：
 
 ```
-bilibili-transcript/
+bili-scribe/
 ├── src/core/       # 核心引擎 — faster-whisper 封装 + B 站 API 交互
-├── cli/            # 命令行工具集 — 持久化队列 + cron 调度
-├── src/web/        # FastAPI 服务使用方式 — 异步队列 + 持久化 + Webhook
+├── src/cli/        # 统一 CLI 入口 — bili-scribe 命令
+├── src/web/        # FastAPI 服务 — 异步队列 + 持久化 + Webhook
 ├── tests/          # 测试套件
-└── experiments/    # 实验记录
+├── experiments/    # 实验记录
+├── docs/           # 文档
+└── scripts/        # 辅助脚本
 ```
 
 | 层级 | 说明 |
 | ------ | ------ |
 | `src/core/` | faster-whisper 为核心的转录引擎，B 站 API 封装，三级降级策略 |
-| `cli/` | Python 命令行工具，实现持久化队列 + cron 调度 |
+| `src/cli/` | 统一 CLI 入口 `bili-scribe`，多子命令结构 |
 | `src/web/` | FastAPI 服务，提供 RESTful HTTP API，支持同步/异步模式 |
 
 ## 核心用法
 
-### 持久化队列（推荐）
-
-使用 `bili_queue.py` 管理转录任务，支持 cron 定时调度、自动重试、CPU 感知调度 + 内存感知调度。
+### CLI 命令（统一入口）
 
 ```bash
-# 添加任务到队列
-python3 src/cli/bili_queue.py add "BV1xxx"
-
-# 查看队列状态
-python3 src/cli/bili_queue.py status
-
-# 安装 cron 定时调度（每10分钟自动检查）
-python3 src/cli/bili_queue.py install-cron
-
-# 列出所有任务
-python3 src/cli/bili_queue.py list
-
-# 重试失败任务
-python3 src/cli/bili_queue.py retry <task_id>
+bili-scribe transcribe <url>    # 转录单个视频
+bili-scribe queue <subcommand>  # 持久化队列管理
+bili-scribe batch <url>         # 批量下载合集
+bili-scribe serve               # 启动 API 服务
+bili-scribe info <url>          # 查询视频信息
+bili-scribe version             # 显示版本
 ```
 
-### 直接调用 Python 脚本
+### 队列管理
 
 ```bash
-python3 fetch_transcript.py "视频URL" [options]
+# 添加任务
+bili-scribe queue add "BV1xxx"
+
+# 查看队列状态
+bili-scribe queue status
+
+# 列出任务
+bili-scribe queue list [pending|running|done|failed]
+
+# 安装 cron 调度（每10分钟自动检查）
+bili-scribe queue install-cron
+
+# 重试失败任务
+bili-scribe queue retry <task_id>
+
+# 删除任务
+bili-scribe queue remove <task_id>
+
+# 取消当前运行的任务
+bili-scribe queue cancel
+
+# 清空队列
+bili-scribe queue clear [pending|failed]
+
+# 查看当前任务列表（从队列读取，非硬编码）
+bili-scribe queue list
 ```
 
 ### 模型选择
@@ -70,13 +87,13 @@ python3 fetch_transcript.py "视频URL" [options]
    - 第 1 级：CC 字幕（UP 主上传）— 秒出
    - 第 2 级：AI 字幕（B 站自动生成）— 秒出
    - 第 3 级：Whisper 本地转录（CPU）— 较慢但最可靠
-4. **保存结果**：音频 → `out/audio/`，文稿 → `out/transcripts/`
+4. **保存结果**：音频 + 文稿 → `out/` 目录
 
 ## 注意事项
 
 - Whisper 转录需要 CPU 资源，2 核 CPU 转录 10 分钟视频约需 6 分钟
 - 首次使用 small 以上模型会自动下载模型文件
-- 输出目录 `~/bilibili-output/` 由脚本自动创建
+- 输出目录 `out/` 由脚本自动创建
 - 虚拟环境 Python 路径：`/opt/data/.venv-whisper/bin/python3`
 
 ## Whisper 内存管理
@@ -144,84 +161,6 @@ segments = self.generate_segments(features, ...)                    # 30秒窗�
 
 ---
 
-## HTTP API 服务
-
-项目提供 RESTful API，通过 HTTP 调用转录功能。
-
-### 启动服务
-
-```bash
-# 直接启动（默认端口 8000）
-uvicorn src.web.server:app --host 0.0.0.0 --port 8000
-
-# 或使用 Python 模块
-python3 -m uvicorn src.web.server:app --host 0.0.0.0 --port 8000
-```
-
-启动后访问 `http://localhost:8000/docs` 查看交互式 API 文档（Swagger UI）。
-
-### 接口列表
-
-| 方法 | 路径 | 说明 |
-| ------ | ------ | ------ |
-| `GET` | `/api/v1/health` | 健康检查 + 队列状态 + 组件检查 |
-| `POST` | `/api/v1/transcribe` | 提交转录任务（同步秒出或异步 202） |
-| `GET` | `/api/v1/transcribe/:task_id` | 查询任务状态和结果 |
-| `GET` | `/api/v1/tasks` | 列出所有任务（分页/过滤） |
-| `GET` | `/api/v1/video/info` | 查询视频信息（不转录） |
-
-### 常用 API 调用
-
-```bash
-# 快速转录（有字幕秒出）
-curl -X POST http://localhost:8000/api/v1/transcribe \
-  -H "Content-Type: application/json" \
-  -d '{"url": "BV1Gm421W75K"}'
-
-# 强制 Whisper 转录（异步，返回 task_id）
-curl -X POST http://localhost:8000/api/v1/transcribe \
-  -H "Content-Type: application/json" \
-  -d '{"url": "BV1Gm421W75K", "mode": "whisper", "model": "tiny"}'
-
-# 轮询异步任务结果
-curl http://localhost:8000/api/v1/transcribe/<task_id>
-
-# 查询视频信息（不转录）
-curl "http://localhost:8000/api/v1/video/info?url=BV1Gm421W75K"
-
-# 健康检查
-curl http://localhost:8000/api/v1/health
-```
-
-### 项目结构
-
-```
-bilibili-transcript/
-├── src/
-│   ├── core/                  # 核心引擎
-│   │   ├── transcriber.py     #   faster-whisper + B站 API + CLI 入口
-│   │   └── download_audio.py  #   批量音频下载
-│   ├── cli/                   # 命令行工具
-│   │   ├── __init__.py
-│   │   └── bili_queue.py       #   持久化队列 + cron 调度
-│   └── web/                   # FastAPI 服务
-│       ├── server.py          #   FastAPI 应用入口
-│       ├── models.py          #   Pydantic 数据模型
-│       ├── queue.py           #   内存任务队列
-│       ├── worker.py          #   后台转录工作者
-│       ├── storage.py         #   任务持久化 (JSON)
-│       └── routes/
-│           ├── health.py      #   GET /api/v1/health
-│           ├── transcribe.py  #   POST + GET /api/v1/transcribe
-│           ├── tasks.py       #   GET /api/v1/tasks
-│           └── video.py       #   GET /api/v1/video/info
-├── docs/API_DESIGN.md         # 完整接口设计文档
-├── fetch_transcript.py        # 兼容入口（委派到 src.core.transcriber）
-└── pyproject.toml             # 依赖定义（uv）
-```
-
----
-
 ## 实验记录
 
 Whisper 内存压力测试等实验记录保存在 `experiments/` 目录：
@@ -236,72 +175,38 @@ bash experiments/2026-07-30_whisper-memory-benchmark/verify.sh check
 
 详见 [experiments/README.md](../experiments/README.md)
 
----
+### 项目结构
 
-## 当前任务队列（2026-08-01）
-
-已添加 27 个 B 站网文写作教学视频到队列，全部使用 `medium` 模型转录。
-
-### 当前任务列表
-
-| # | BVID | 描述 | 模型 |
-| --- | ------ | ------ | ------ |
-| 1 | BV15N4y1H7vd | 手把手教你写细纲，四行字细纲写法 | medium |
-| 2 | BV1nYDWYKEc3 | 把网文写成填空题（网文大纲模板） | medium |
-| 3 | BV1d34y1b7og | 手把手做小说大纲示范 | medium |
-| 4 | BV1cMnEzpEc2 | 小说教学：怎么拆书，拆什么？ | medium |
-| 5 | BV1t1Z4YgEWV | 白特慢啊：干货：如何做好剧情循环 | medium |
-| 6 | BV1cz4y1q73f | 徐善良拆书《大奉打更人》 | medium |
-| 7 | BV1ma4y1J7tY | 飞羽教你写网文【细纲拓展练习】 | medium |
-| 8 | BV1op4y1g7UA | 细纲应该写多少字？细纲应该怎么写？ | medium |
-| 9 | BV1mFc1eeEmJ | 小说作者日更万字的秘密——情节细纲 | medium |
-| 10 | BV1YuTG6gEN4 | 万订干货：关于大纲的一切（一） | medium |
-| 11 | BV11N41117iU | 网文大纲细纲支线设计思路 | medium |
-| 12 | BV1hLfdBdEC1 | 将脑洞变成小说，小说大纲构思流程分享 | medium |
-| 13 | BV11Z4y1H7ra | 老网文作者是如何做细纲的 | medium |
-| 14 | BV1nbKP6hE45 | 万订干货：关于大纲的一切（二） | medium |
-| 15 | BV1hBZbYXE7H | 蜜汁姬：如何从灵感构建完整故事主线框架 | medium |
-| 16 | BV1UqCWB4EmG | 天蚕土豆教怎么写小说 | medium |
-| 17 | BV1HC4y1V7ir | 新人作者必学技能：细纲实操 | medium |
-| 18 | BV18zwXzWEmV | 如何写小说大纲 | medium |
-| 19 | BV12L411i7km | 除了手速，细纲还有这些妙用 | medium |
-| 20 | BV1yg411h7zy | 干货\| 大纲怎么写？ | medium |
-| 21 | BV1tE411f7wZ | 从零开始的小说创作课程-03 | medium |
-| 22 | BV1X44y1k7H4 | 从灵感到网文大纲/卷纲/章纲硬核构建全过程 | medium |
-| 23 | BV12bKH6sE7c | 放弃边写边改！细纲+分段写作+存稿缓冲 | medium |
-| 24 | BV1TxJhzvEtx | 新人写小说 三种大纲细纲的构建办法 | medium |
-| 25 | BV1GnFyeMEPR | 什么是小纲？有啥用？怎么练？ | medium |
-| 26 | BV1LG3p6XEPA | 什么是小说核心，什么是小说卖点 | medium |
-| 27 | BV1uo3z6oE35 | 最适合网文新人的拆书模板，一本书搞定签约 | medium |
-
-### 队列管理命令
-
-```bash
-# 查看队列状态（统计 + CPU 负载）
-python3 src/cli/bili_queue.py status
-
-# 列出所有待处理任务
-python3 src/cli/bili_queue.py list
-
-# 列出指定状态的任务
-python3 src/cli/bili_queue.py list pending     # 待处理
-python3 src/cli/bili_queue.py list running     # 运行中
-python3 src/cli/bili_queue.py list done        # 已完成
-python3 src/cli/bili_queue.py list failed      # 失败
-
-# 重试失败任务
-python3 src/cli/bili_queue.py retry <task_id>
-
-# 删除任务
-python3 src/cli/bili_queue.py remove <task_id>
-
-# 取消当前运行的任务
-python3 src/cli/bili_queue.py cancel
-
-# 清空队列
-python3 src/cli/bili_queue.py clear            # 交互式确认
-python3 src/cli/bili_queue.py clear pending    # 清空待处理
-python3 src/cli/bili_queue.py clear failed     # 清空失败
+```
+bili-scribe/
+├── src/
+│   ├── core/                  # 核心引擎
+│   │   ├── transcriber.py     #   faster-whisper 转录引擎
+│   │   ├── bilibili.py        #   B 站 API 交互层
+│   │   ├── runner.py          #   转录执行编排（三级降级）
+│   │   ├── queue_store.py     #   队列持久化存储
+│   │   └── download_audio.py  #   批量音频下载
+│   ├── cli/                   # 统一 CLI 入口
+│   │   ├── __init__.py
+│   │   ├── main.py            #   bili-scribe 统一入口
+│   │   └── bili_queue.py      #   队列管理子命令
+│   └── web/                   # FastAPI 服务
+│       ├── server.py          #   FastAPI 应用入口
+│       ├── models.py          #   Pydantic 数据模型
+│       ├── queue.py           #   内存任务队列
+│       ├── worker.py          #   后台转录工作者
+│       ├── storage.py         #   任务持久化 (JSON)
+│       └── routes/
+│           ├── health.py      #   GET /api/v1/health
+│           ├── transcribe.py  #   POST + GET /api/v1/transcribe
+│           ├── tasks.py       #   GET /api/v1/tasks
+│           └── video.py       #   GET /api/v1/video/info
+├── docs/API_DESIGN.md         # 完整接口设计文档
+├── docs/adr/                  # 架构决策记录
+├── experiments/               # 实验记录
+├── scripts/                   # 辅助脚本
+├── .env                       # 环境变量（本地，不上传）
+└── pyproject.toml             # 依赖定义（uv）
 ```
 
 ### 调度策略
@@ -324,22 +229,13 @@ python3 src/cli/bili_queue.py clear failed     # 清空失败
 
 ### 输出位置
 
-转录完成后，结果保存在 `out/` 下（平铺的原始格式），运行迁移脚本后整理到 `library/`：
+转录完成后，结果保存在 `out/` 下：
 
 ```
-out/                         ← 下载目录（新转录的原始输出）
+out/
 ├── BV15N4y1H7vd_标题/
 │   ├── 视频链接.txt
-│   ├── 转录文稿.txt
+│   ├── 字幕.srt
 │   └── audio.m4s
 └── ...
-
-library/                     ← 整理后的文库
-├── 作者/                    ← 物理存储（按作者分类）
-│   ├── 徐善良/
-│   ├── 通用教程/              ← 无明确作者归属的归入此类
-│   └── ...
-├── 系列/                    ← 软连接（按主题聚合）
-├── 作品/                    ← 软连接（按被拆解的小说名聚合）
-└── 大纲                     ← 保留（手动编辑的摘要文件）
 ```

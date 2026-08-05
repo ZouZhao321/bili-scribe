@@ -26,7 +26,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.core.bilibili import extract_bvid, get_video_info  # noqa: E402
+from src.core.bilibili import extract_bvid, get_collection_info, get_video_info  # noqa: E402
 from src.core.runner import run_transcription  # noqa: E402
 
 VERSION = "1.0.0"
@@ -312,8 +312,6 @@ def cmd_batch(args: argparse.Namespace) -> None:
     print(f"   BV ID: {bvid}")
 
     # 获取合集信息
-    from download_collection import get_collection_info
-
     collection = get_collection_info(bvid)
     if not collection:
         print("\n❌ 该视频不属于任何合集，或无法获取合集信息。")
