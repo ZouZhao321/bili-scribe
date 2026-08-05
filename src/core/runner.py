@@ -5,8 +5,6 @@
 不包含队列逻辑，供 bili_queue.py 和 fetch_transcript.py 共用。
 """
 
-import argparse
-import sys
 import urllib.error
 from datetime import datetime
 from pathlib import Path
@@ -142,42 +140,3 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# 兼容 CLI 入口（供 fetch_transcript.py / pyproject.toml 调用）
-# ---------------------------------------------------------------------------
-def cli_main():
-    """命令行转录入口，与旧 main.py 接口兼容."""
-    parser = argparse.ArgumentParser(description="获取 B 站视频字幕")
-    parser.add_argument("url", help="B 站视频链接或 BV ID")
-    parser.add_argument("--text-only", action="store_true", help="仅输出纯文本")
-    parser.add_argument("--timestamps", action="store_true", help="包含时间戳")
-    parser.add_argument("--page", type=int, default=0, help="分 P 序号（从 0 开始）")
-    parser.add_argument("--whisper", action="store_true", help="强制使用 Whisper 降级")
-    parser.add_argument("--cookie", default="", help="B 站登录 Cookie")
-    parser.add_argument("--json", action="store_true", help="输出原始 JSON")
-    parser.add_argument("--language", default="zh", help="Whisper 语言提示（默认: zh）")
-    parser.add_argument("--model", default="small", help="Whisper 模型大小")
-    parser.add_argument("--save-audio", default="", help="保存音频文件到指定路径")
-    parser.add_argument("--format", choices=["srt", "all"], default="all",
-                        help="输出格式: srt=SRT字幕, all=全部（默认）")
-    args = parser.parse_args()
-
-    result = run_transcription(args.url, args.model)
-    if not result["success"]:
-        print(result["error"], file=sys.stderr)
-        sys.exit(1)
-
-    if args.format == "srt":
-        srt_path = result.get("srt")
-        if srt_path:
-            text = Path(srt_path).read_text(encoding="utf-8")
-            print(text)
-    else:
-        print(f"✓ 转录完成: {result.get('title', '')}")
-        print(f"  SRT字幕: {result.get('srt', '')}")
-        print(f"  音频: {result.get('audio', '无')}")
-        print(f"  行数: {result.get('lines', 0)}")
-
-
-if __name__ == "__main__":
-    cli_main()

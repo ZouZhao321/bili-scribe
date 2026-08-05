@@ -1,1 +1,1 @@
-"""Bilibili Transcript API — FastAPI 应用包。"""
+"""bili-scribe API — FastAPI 应用包。"""

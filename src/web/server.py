@@ -1,4 +1,4 @@
-"""Bilibili Transcript API — FastAPI 应用入口。"""
+"""bili-scribe API — FastAPI 应用入口。"""
 
 from contextlib import asynccontextmanager
 
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Bilibili Transcript API",
+    title="bili-scribe API",
     description="B站视频字幕提取 + Whisper 本地语音转录服务的 HTTP API",
     version="1.0.0",
     docs_url="/docs",
@@ -51,4 +51,4 @@ async def root():
     返回：
         dict: 服务名称和状态指示。
     """
-    return {"status": "ok", "service": "bilibili-transcript-api"}
+    return {"status": "ok", "service": "bili-scribe-api"}

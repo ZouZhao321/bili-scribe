@@ -1,4 +1,4 @@
-"""Pydantic data models for Bilibili Transcript API."""
+"""Pydantic data models for bili-scribe API."""
 
 from __future__ import annotations
 
