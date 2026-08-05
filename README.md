@@ -37,6 +37,7 @@ python3 fetch_transcript.py "URL" --text-only
 ```
 
 输出目录 `~/bilibili-output/`：
+
 ```
 bilibili-output/
 ├── audio/
@@ -55,7 +56,7 @@ bilibili-output/
 ```
 
 | 模型 | 大小 | 速度 | 质量 | 适用场景 |
-|------|------|------|------|---------|
+| ------ | ------ | ------ | ------ | --------- |
 | tiny | 75MB | ~1x | 一般 | 快速预览 |
 | base | 141MB | ~1.5x | 可用 | 短视频 |
 | small | 464MB | ~3x | 较好 | 日常使用（默认） |
@@ -100,10 +101,74 @@ python3 fetch_transcript.py "URL" --whisper
 ## 性能参考（small 模型，2 核 CPU）
 
 | 视频时长 | 音频大小 | 转录耗时 | 内存峰值 |
-|---------|---------|---------|---------|
+| --------- | --------- | --------- | --------- |
 | 10 分钟 | ~6MB | ~6 分钟 | ~1.6GB |
 | 25 分钟 | ~18MB | ~15 分钟 | ~1.6GB |
 
 ## License
 
 MIT
+
+## HTTP API 服务
+
+项目提供 RESTful API，可通过 HTTP 调用转录功能。
+
+### 安装 API 依赖
+
+```bash
+source .venv/bin/activate
+pip install -r requirements-api.txt
+```
+
+### 启动服务
+
+```bash
+# 后台启动
+./api.sh start
+
+# 查看状态
+./api.sh status
+
+# 查看日志
+./api.sh logs
+
+# 停止服务
+./api.sh stop
+```
+
+### API 接口
+
+| 方法 | 路径 | 说明 |
+| ------ | ------ | ------ |
+| `GET` | `/api/v1/health` | 健康检查 + 队列状态 |
+| `POST` | `/api/v1/transcribe` | 提交转录任务 |
+| `GET` | `/api/v1/transcribe/:task_id` | 查询任务状态 |
+| `GET` | `/api/v1/tasks` | 列出所有任务 |
+| `GET` | `/api/v1/video/info` | 查询视频信息 |
+
+启动后访问 `http://localhost:8000/docs` 查看交互式 API 文档。
+
+### 示例
+
+```bash
+# 快速转录（有字幕秒出）
+curl -X POST http://localhost:8000/api/v1/transcribe \
+  -H "Content-Type: application/json" \
+  -d '{"url": "BV1Gm421W75K"}'
+
+# 强制 Whisper 转录（异步）
+curl -X POST http://localhost:8000/api/v1/transcribe \
+  -H "Content-Type: application/json" \
+  -d '{"url": "BV1Gm421W75K", "mode": "whisper", "model": "tiny"}'
+
+# 查询任务状态
+curl http://localhost:8000/api/v1/transcribe/<task_id>
+
+# 查询视频信息（不转录）
+curl "http://localhost:8000/api/v1/video/info?url=BV1Gm421W75K"
+
+# 健康检查
+curl http://localhost:8000/api/v1/health
+```
+
+详细接口文档见 [API_DESIGN.md](API_DESIGN.md)。
