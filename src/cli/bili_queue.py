@@ -56,6 +56,83 @@ from src.core.queue_store import (  # noqa: E402
 )
 from src.core.runner import TIMEOUT, run_transcription  # noqa: E402
 
+
+# ---------------------------------------------------------------------------
+# Git 临时分支操作
+# ---------------------------------------------------------------------------
+def git_commit_and_push(branch_name: str, task_id: str, result: dict) -> None:
+    """在临时分支上提交转录输出并推送到远端.
+
+    创建 transcribe/BVxxx 分支，添加输出文件，提交并推送。
+    失败时记录日志但不会抛出异常。
+    """
+    bv = result.get("bv", "")
+    title = result.get("title", "")[:60]
+    commit_msg = f"feat(transcribe): {bv} {title}" if title else f"feat(transcribe): {task_id}"
+    output_dir = PROJECT_ROOT / "out"
+
+    try:
+        # 确保在 main 上
+        subprocess.run(
+            ["git", "checkout", "main"],
+            cwd=PROJECT_ROOT, capture_output=True, timeout=30,
+        )
+
+        # 若本地已有同名分支则删除
+        branch_check = subprocess.run(
+            ["git", "branch", "--list", branch_name],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=10,
+        )
+        if branch_name in branch_check.stdout:
+            subprocess.run(
+                ["git", "branch", "-D", branch_name],
+                cwd=PROJECT_ROOT, capture_output=True, timeout=15,
+            )
+
+        # 创建临时分支
+        subprocess.run(
+            ["git", "checkout", "-b", branch_name],
+            cwd=PROJECT_ROOT, check=True, capture_output=True, timeout=30,
+        )
+
+        # 查找并强制添加输出目录
+        out_pattern = f"{bv}_*" if bv else task_id
+        matched = sorted(output_dir.glob(out_pattern))
+        if matched:
+            for p in matched:
+                subprocess.run(
+                    ["git", "add", "-f", str(p)],
+                    cwd=PROJECT_ROOT, check=True, capture_output=True, timeout=30,
+                )
+
+        # 提交
+        subprocess.run(
+            ["git", "commit", "-m", commit_msg],
+            cwd=PROJECT_ROOT, check=True, capture_output=True, timeout=30,
+        )
+
+        # 推送
+        subprocess.run(
+            ["git", "push", "origin", branch_name],
+            cwd=PROJECT_ROOT, check=True, capture_output=True, timeout=60,
+        )
+
+        logger.info("Git 分支已推送: %s  %s", branch_name, commit_msg)
+
+    except subprocess.CalledProcessError as e:
+        logger.warning("Git 分支操作失败 (stderr): %s", e.stderr.decode() if e.stderr else str(e))
+    except Exception as e:
+        logger.warning("Git 分支操作异常: %s", e)
+    finally:
+        # 始终切回 main
+        try:
+            subprocess.run(
+                ["git", "checkout", "main"],
+                cwd=PROJECT_ROOT, capture_output=True, timeout=15,
+            )
+        except Exception:
+            pass
+
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
@@ -196,6 +273,10 @@ def cmd_cron(_args):
                 completed_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
             logger.info("✓ 完成: %s  (%s 行)", task_id, result.get("lines", 0))
+
+            # 转录成功 → 提交到临时 git 分支并推送
+            branch_name = f"transcribe/{task_id}"
+            git_commit_and_push(branch_name, task_id, result)
         else:
             task = store.get(task_id) or {}
             retries = task.get("retries", 0) + 1
