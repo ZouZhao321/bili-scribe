@@ -1,0 +1,21 @@
+{
+  "permission": {
+    "write": {
+      "*": "allow"
+    },
+    "edit": {
+      "*": "allow"
+    },
+    "bash": {
+      "*": "allow",
+      "rm -rf *": "ask",
+      "rm -rf": "ask",
+      "sudo *": "ask",
+      "chmod 777 *": "deny",
+      "curl * | sh": "deny",
+      "curl * | bash": "deny",
+      "wget * | sh": "deny",
+      "wget * | bash": "deny"
+    }
+  }
+}

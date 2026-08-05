@@ -24,3 +24,6 @@ Thumbs.db
 
 # Whisper model cache (large, download on demand)
 *.bin
+
+# Output directory
+out/

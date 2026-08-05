@@ -10,7 +10,13 @@
 #   transcripts/  - text transcripts (.txt) + link info (_link.txt)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VENV_PYTHON="/opt/data/.venv-whisper/bin/python3"
+VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+
+# 如果 venv 不存在，回退到系统 Python
+if [ ! -f "$VENV_PYTHON" ]; then
+    VENV_PYTHON="python3"
+fi
+
 TRANSCRIPT_SCRIPT="$SCRIPT_DIR/fetch_transcript.py"
 OUTPUT_DIR="$HOME/bilibili-output"
 
