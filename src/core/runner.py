@@ -28,32 +28,6 @@ from src.core.transcriber import whisper_transcribe
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "out"
 
-# 作者匹配规则（与迁移脚本一致）
-_AUTHOR_RULES = [
-    ("徐善良拆书", "徐善良"),
-    ("徐善良", "徐善良"),
-    ("卖报小郎君", "卖报小郎君"),
-    ("白特慢啊", "白特慢啊"),
-    ("96捞鱼费舍尔", "96捞鱼费舍尔"),
-    ("以筠", "以筠"),
-    ("蜜汁姬", "蜜汁姬"),
-    ("天蚕土豆", "天蚕土豆"),
-    ("蜀中剑士", "蜀中剑士"),
-    ("会说话的肘子", "会说话的肘子"),
-    ("七月新番", "七月新番"),
-    ("滾开", "滚开"),
-    ("【世界观设计", "以筠"),
-]
-
-
-def resolve_author(title: str, bvid: str) -> str:
-    """根据视频标题确定作者，无匹配时归入 通用教程。"""
-    for keyword, author in _AUTHOR_RULES:
-        if keyword in title:
-            return author
-    return "通用教程"
-
-
 TIMEOUT = 6 * 3600  # 6 小时
 
 
@@ -92,9 +66,8 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
     safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
     filename = f"{bvid}_{safe_title}"
 
-    # 4. 确定作者，创建视频专属目录 out/作者/作者名/BV号_标题/
-    author = resolve_author(title, bvid)
-    video_dir = OUTPUT_DIR / "作者" / author / filename
+    # 4. 创建视频专属目录 out/BV号_标题/
+    video_dir = OUTPUT_DIR / filename
     video_dir.mkdir(parents=True, exist_ok=True)
 
     # 5. 保存链接信息

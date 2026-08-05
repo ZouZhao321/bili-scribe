@@ -21,13 +21,19 @@ description: 将口语转录文稿转换为书面化文稿。当用户提到"书
 
 ### 1. 定位转录文件
 
-转录文稿位于项目 `out/作者/` 目录下的子目录中，格式为：
+转录文稿位于项目 `library/作者/` 目录下的子目录中，格式为：
 
 ```
-out/作者/<作者名>/<视频ID>_<视频标题>/转录文稿.txt
+library/作者/<作者名>/<视频ID>_<视频标题>/转录文稿.txt
 ```
 
-同时支持通过 `out/系列/` 和 `out/作品/` 下的软连接访问。
+同时支持通过 `library/系列/` 和 `library/作品/` 下的软连接访问。
+
+新转录的视频会先输出到 `out/` 目录，运行迁移脚本后整理到 `library/`：
+
+```bash
+python3 scripts/migrate_out_structure.py --apply
+```
 
 ### 2. 运行转换脚本
 
@@ -36,7 +42,7 @@ cd /root/bilibili-transcript
 python .agents/skills/convert-to-written/scripts/convert_to_written.py
 ```
 
-脚本会自动扫描 `out/作者/*/*/转录文稿.txt`（兼容旧结构 `out/*/转录文稿.txt`），为每个文件生成对应的 `书面文稿.txt`。
+脚本会自动扫描 `library/作者/*/*/转录文稿.txt`（兼容旧结构 `out/*/转录文稿.txt`），为每个文件生成对应的 `书面文稿.txt`。
 
 ### 3. 验证输出
 

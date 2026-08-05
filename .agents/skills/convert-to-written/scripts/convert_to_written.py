@@ -297,10 +297,10 @@ def convert_file(input_path, output_path):
 
 
 def main():
-    # 支持新旧两种结构，优先扫描新结构
-    pattern_new = os.path.join("out", "作者", "*", "*", "转录文稿.txt")
-    pattern_old = os.path.join("out", "*", "转录文稿.txt")
-    files = sorted(glob.glob(pattern_new) + glob.glob(pattern_old))
+    # 支持新结构 library/ 和旧结构 out/，优先扫描新结构
+    pattern_lib = os.path.join("library", "作者", "*", "*", "转录文稿.txt")
+    pattern_out = os.path.join("out", "*", "转录文稿.txt")
+    files = sorted(glob.glob(pattern_lib) + glob.glob(pattern_out))
 
     print(f"找到 {len(files)} 个转录文稿\n")
 

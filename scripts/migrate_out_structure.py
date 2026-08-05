@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
 """
-迁移 out/ 目录结构：按作者分类 + 系列/作品软连接。
+将 out/ 下新转录的视频，按作者分类迁移到 library/，并创建系列/作品软连接。
 
-新结构：
-  out/
+结构：
+  out/                     ← 下载目录（新转录输出到这里，平铺原始格式）
+  library/                 ← 整理后的文库
+  ├── 作者/              ← 物理存储
+  │   ├── 徐善良/
+  │   ├── 以筠/
+  │   ├── 卖报小郎君/
+  │   ├── 通用教程/       ← 无明确作者归属的归入此类
+  │   └── ...
+  ├── 系列/              ← 软连接（按主题聚合）
+  ├── 作品/              ← 软连接（按被拆解的小说名聚合）
+  └── 大纲               ← 保留（手动编辑的摘要文件）
+
+用法：
+  python3 scripts/migrate_out_structure.py          # dry-run 预览
+  python3 scripts/migrate_out_structure.py --apply   # 执行迁移
   ├── 作者/              ← 物理存储（唯一真实位置）
   │   ├── 徐善良/
   │   ├── 以筠/
@@ -37,9 +51,13 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = PROJECT_ROOT / "out"
-AUTHOR_DIR = OUT_DIR / "作者"
-SERIES_DIR = OUT_DIR / "系列"
-WORK_DIR = OUT_DIR / "作品"
+LIBRARY_DIR = PROJECT_ROOT / "library"
+AUTHOR_DIR = LIBRARY_DIR / "作者"
+SERIES_DIR = LIBRARY_DIR / "系列"
+WORK_DIR = LIBRARY_DIR / "作品"
+
+# 需要排除的目录（不迁移）
+EXCLUDE_DIRS = {"大纲"}
 
 # 需要排除的目录（不迁移）
 EXCLUDE_DIRS = {"大纲"}
@@ -394,8 +412,8 @@ def main():
             series_count += 1
             print(f"  🔗 {series_name}/{dest.name} → {dest.relative_to(PROJECT_ROOT)}")
 
-    # 处理大纲/ 目录下的视频（它们也在大纲细纲系列中）
-    dagang_dir = OUT_DIR / "大纲"
+    # 处理 library/大纲/ 目录下的视频（它们也在大纲细纲系列中）
+    dagang_dir = LIBRARY_DIR / "大纲"
     if dagang_dir.exists():
         for item in dagang_dir.iterdir():
             if not item.is_dir():
@@ -427,7 +445,7 @@ def main():
             work_count += 1
             print(f"  🔗 {work_name}/{dest.name} → {dest.relative_to(PROJECT_ROOT)}")
 
-    # 处理大纲/ 目录下的视频，它们也可能有作品映射
+    # 处理 library/大纲/ 目录下的视频，它们也可能有作品映射
     if dagang_dir.exists():
         for item in dagang_dir.iterdir():
             if not item.is_dir():
@@ -444,12 +462,12 @@ def main():
     print()
 
     # -----------------------------------------------------------------------
-    # 第六步：处理大纲/ 目录的剩余内容
+    # 第六步：处理 library/大纲/ 目录的剩余内容
     # -----------------------------------------------------------------------
-    print("【第六步】处理大纲/ 目录...")
+    print("【第六步】处理 library/大纲/ 目录...")
 
     if dagang_dir.exists():
-        # 将 大纲/ 目录下的视频目录移动到 作者/通用教程/
+        # 将 library/大纲/ 下的视频目录移动到 作者/通用教程/
         dagang_videos = sorted(dagang_dir.iterdir())
         moved_count = 0
         for item in dagang_videos:
@@ -458,15 +476,14 @@ def main():
             dest = AUTHOR_DIR / DEFAULT_AUTHOR / item.name
             dest.parent.mkdir(parents=True, exist_ok=True)
             if dest.exists():
-                # 目标已存在（主目录中已有同名视频），保留更完整的版本
-                print(f"  ⚠ {item.name} 在通用教程中已存在，跳过（保留主目录版本）")
+                print(f"  ⚠ {item.name} 在通用教程中已存在，跳过")
                 shutil.rmtree(item)
             else:
                 shutil.move(str(item), str(dest))
                 moved_count += 1
                 print(f"  📦 {item.name} → 作者/通用教程/")
 
-        # 保留摘要文件，放到系列/大纲细纲/下
+        # 保留摘要文件
         summary_file = dagang_dir / "细纲创作综合摘要.md"
         if summary_file.exists():
             dagang_series_dir = SERIES_DIR / "大纲细纲"
@@ -474,27 +491,29 @@ def main():
             shutil.copy2(str(summary_file), str(dagang_series_dir / "细纲创作综合摘要.md"))
             print(f"  📄 摘要文件已复制到 系列/大纲细纲/")
 
-        # 删除空的大纲/ 目录
         remaining = list(dagang_dir.iterdir())
         if not remaining:
             dagang_dir.rmdir()
-            print(f"  🗑 已删除空目录: 大纲/")
+            print(f"  🗑 已删除空目录: library/大纲/")
         else:
-            print(f"  ⚠ 大纲/ 目录非空，剩余: {[p.name for p in remaining]}")
+            print(f"  ⚠ library/大纲/ 非空，剩余: {[p.name for p in remaining]}")
 
         print(f"  共迁移 {moved_count} 个视频")
     else:
-        print(f"  ⏭ 大纲/ 目录不存在，跳过")
+        print(f"  ⏭ library/大纲/ 目录不存在，跳过")
 
     print()
     print("=" * 60)
     print("  ✅ 迁移完成！")
     print("=" * 60)
     print()
-    print("新结构:")
-    print(f"  {AUTHOR_DIR.relative_to(PROJECT_ROOT)}/  ← 物理存储")
-    print(f"  {SERIES_DIR.relative_to(PROJECT_ROOT)}/  ← 软连接（按主题）")
-    print(f"  {WORK_DIR.relative_to(PROJECT_ROOT)}/    ← 软连接（按作品）")
+    print("最终结构:")
+    print(f"  out/                     ← 下载目录（新转录）")
+    print(f"  {LIBRARY_DIR.relative_to(PROJECT_ROOT)}/                 ← 整理后的文库")
+    print(f"    ├── 作者/            ← 物理存储")
+    print(f"    ├── 系列/            ← 软连接（按主题）")
+    print(f"    ├── 作品/            ← 软连接（按作品）")
+    print(f"    └── 大纲/            ← 细纲摘要")
 
 
 if __name__ == "__main__":
