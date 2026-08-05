@@ -55,3 +55,40 @@ def format_timestamp(seconds: float) -> str:
     if h > 0:
         return f"{h:02d}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
+
+
+def format_srt_timestamp(seconds: float) -> str:
+    """将秒数转换为 SRT 标准时间戳格式（HH:MM:SS,mmm）。
+
+    参数：
+        seconds: 时长（秒）。
+
+    返回：
+        SRT 格式时间戳字符串（如 "00:05:11,000"）。
+    """
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int((seconds - int(seconds)) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def format_srt(subtitles: list[dict]) -> str:
+    """将字幕片段列表格式化为 SRT 字幕文本。
+
+    参数：
+        subtitles: 包含 "from"、"to" 和 "content" 键的片段字典列表。
+
+    返回：
+        SRT 格式的完整字幕字符串。
+    """
+    lines = []
+    for i, item in enumerate(subtitles, 1):
+        from_ts = format_srt_timestamp(item.get("from", 0))
+        to_ts = format_srt_timestamp(item.get("to", 0))
+        content = item.get("content", "").strip()
+        lines.append(f"{i}")
+        lines.append(f"{from_ts} --> {to_ts}")
+        lines.append(content)
+        lines.append("")
+    return "\n".join(lines)
