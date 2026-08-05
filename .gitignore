@@ -29,3 +29,6 @@ scripts/*.sh
 out/_read_out.py
 out/
 library/
+
+# Temp files (not tracked)
+temp/
