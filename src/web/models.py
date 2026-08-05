@@ -30,6 +30,7 @@ class OutputFormat(str, Enum):
     text = "text"
     timestamps = "timestamps"
     json = "json"
+    srt = "srt"
 
 
 class TaskStatus(str, Enum):

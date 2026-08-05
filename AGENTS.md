@@ -27,7 +27,7 @@ bilibili-transcript/
 
 ### 持久化队列（推荐）
 
-使用 `bili_queue.py` 管理转录任务，支持 cron 定时调度、自动重试、CPU 感知调度。
+使用 `bili_queue.py` 管理转录任务，支持 cron 定时调度、自动重试、CPU 感知调度 + 内存感知调度。
 
 ```bash
 # 添加任务到队列
@@ -235,3 +235,104 @@ bash experiments/2026-07-30_whisper-memory-benchmark/verify.sh check
 ```
 
 详见 [experiments/README.md](../experiments/README.md)
+
+---
+
+## 当前任务队列（2026-08-01）
+
+已添加 27 个 B 站网文写作教学视频到队列，全部使用 `medium` 模型转录。
+
+### 当前任务列表
+
+| # | BVID | 描述 | 模型 |
+| --- | ------ | ------ | ------ |
+| 1 | BV15N4y1H7vd | 手把手教你写细纲，四行字细纲写法 | medium |
+| 2 | BV1nYDWYKEc3 | 把网文写成填空题（网文大纲模板） | medium |
+| 3 | BV1d34y1b7og | 手把手做小说大纲示范 | medium |
+| 4 | BV1cMnEzpEc2 | 小说教学：怎么拆书，拆什么？ | medium |
+| 5 | BV1t1Z4YgEWV | 白特慢啊：干货：如何做好剧情循环 | medium |
+| 6 | BV1cz4y1q73f | 徐善良拆书《大奉打更人》 | medium |
+| 7 | BV1ma4y1J7tY | 飞羽教你写网文【细纲拓展练习】 | medium |
+| 8 | BV1op4y1g7UA | 细纲应该写多少字？细纲应该怎么写？ | medium |
+| 9 | BV1mFc1eeEmJ | 小说作者日更万字的秘密——情节细纲 | medium |
+| 10 | BV1YuTG6gEN4 | 万订干货：关于大纲的一切（一） | medium |
+| 11 | BV11N41117iU | 网文大纲细纲支线设计思路 | medium |
+| 12 | BV1hLfdBdEC1 | 将脑洞变成小说，小说大纲构思流程分享 | medium |
+| 13 | BV11Z4y1H7ra | 老网文作者是如何做细纲的 | medium |
+| 14 | BV1nbKP6hE45 | 万订干货：关于大纲的一切（二） | medium |
+| 15 | BV1hBZbYXE7H | 蜜汁姬：如何从灵感构建完整故事主线框架 | medium |
+| 16 | BV1UqCWB4EmG | 天蚕土豆教怎么写小说 | medium |
+| 17 | BV1HC4y1V7ir | 新人作者必学技能：细纲实操 | medium |
+| 18 | BV18zwXzWEmV | 如何写小说大纲 | medium |
+| 19 | BV12L411i7km | 除了手速，细纲还有这些妙用 | medium |
+| 20 | BV1yg411h7zy | 干货\| 大纲怎么写？ | medium |
+| 21 | BV1tE411f7wZ | 从零开始的小说创作课程-03 | medium |
+| 22 | BV1X44y1k7H4 | 从灵感到网文大纲/卷纲/章纲硬核构建全过程 | medium |
+| 23 | BV12bKH6sE7c | 放弃边写边改！细纲+分段写作+存稿缓冲 | medium |
+| 24 | BV1TxJhzvEtx | 新人写小说 三种大纲细纲的构建办法 | medium |
+| 25 | BV1GnFyeMEPR | 什么是小纲？有啥用？怎么练？ | medium |
+| 26 | BV1LG3p6XEPA | 什么是小说核心，什么是小说卖点 | medium |
+| 27 | BV1uo3z6oE35 | 最适合网文新人的拆书模板，一本书搞定签约 | medium |
+
+### 队列管理命令
+
+```bash
+# 查看队列状态（统计 + CPU 负载）
+python3 src/cli/bili_queue.py status
+
+# 列出所有待处理任务
+python3 src/cli/bili_queue.py list
+
+# 列出指定状态的任务
+python3 src/cli/bili_queue.py list pending     # 待处理
+python3 src/cli/bili_queue.py list running     # 运行中
+python3 src/cli/bili_queue.py list done        # 已完成
+python3 src/cli/bili_queue.py list failed      # 失败
+
+# 重试失败任务
+python3 src/cli/bili_queue.py retry <task_id>
+
+# 删除任务
+python3 src/cli/bili_queue.py remove <task_id>
+
+# 取消当前运行的任务
+python3 src/cli/bili_queue.py cancel
+
+# 清空队列
+python3 src/cli/bili_queue.py clear            # 交互式确认
+python3 src/cli/bili_queue.py clear pending    # 清空待处理
+python3 src/cli/bili_queue.py clear failed     # 清空失败
+```
+
+### 调度策略
+
+- **CPU 感知**：CPU 使用率 < 50% 时自动取任务执行
+- **内存感知**：可用内存 ≥ 模型需求的 90% 时才执行，避免 OOM
+- **cron 触发**：每 10 分钟检查一次队列
+- **自动重试**：失败最多重试 3 次
+- **超时保护**：任务运行超过 6 小时视为僵死，放回队列重试
+
+### 模型内存需求（队列调度用）
+
+| 模型 | 最小可用内存 | 说明 |
+| ------ | ------------- | ------ |
+| tiny | 500 MB | 75MB 模型 + 开销 |
+| base | 1.0 GB | 141MB 模型 + 开销 |
+| small | 2.0 GB | 464MB 模型 + 开销 |
+| medium | 3.5 GB | 1.5GB 模型，RSS ~3GB |
+| large-v3 | 5.5 GB | 2.9GB 模型，RSS ~5GB |
+
+### 输出位置
+
+转录完成后，结果保存在项目根目录的 `out/` 下，每个视频一个子目录：
+
+```
+out/
+├── BV15N4y1H7vd_标题/
+│   ├── 视频链接.txt     # 视频元数据
+│   ├── 转录文稿.txt     # 转录文本（纯文本）
+│   └── audio.m4s        # 下载的音频文件
+├── BV1nYDWYKEc3_标题/
+│   └── ...  
+└── ...
+```

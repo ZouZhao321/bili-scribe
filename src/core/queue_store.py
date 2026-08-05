@@ -25,6 +25,7 @@ LOG_FILE = QUEUE_DIR / "cron.log"
 MAX_RETRIES = 3
 TIMEOUT = 6 * 3600  # 6 小时
 CPU_THRESHOLD = 50
+MEMORY_THRESHOLD = 0.90  # 可用内存低于模型需求的 90% 时跳过
 
 # ---------------------------------------------------------------------------
 # 日志
@@ -173,6 +174,34 @@ class FileLock:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.release()
+
+
+# ---------------------------------------------------------------------------
+# 模型内存需求（MB）
+# ---------------------------------------------------------------------------
+MODEL_MEMORY_REQUIREMENTS = {
+    "tiny": 500,  # MB，实际模型 75MB + 开销
+    "base": 1000,  # MB，实际模型 141MB + 开销
+    "small": 2000,  # MB，实际模型 464MB + 开销
+    "medium": 3500,  # MB，实际模型 1.5GB + 开销（RSS ~3GB）
+    "large-v3": 5500,  # MB，实际模型 2.9GB + 开销
+}
+
+
+# ---------------------------------------------------------------------------
+# 可用内存检测
+# ---------------------------------------------------------------------------
+def get_available_memory_mb() -> int:
+    """读取 /proc/meminfo 获取可用内存（MB）."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    kb = int(line.split()[1])
+                    return kb // 1024
+    except (OSError, IndexError, ValueError):
+        pass
+    return 0
 
 
 # ---------------------------------------------------------------------------

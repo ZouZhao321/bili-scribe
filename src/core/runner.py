@@ -128,15 +128,32 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
     if not subtitles:
         return {"success": False, "error": "该视频没有可用字幕"}
 
-    # 7. 写入文稿
+    # 7. 写入文稿 — 纯文本 + 带时间戳两个版本
     lines = [item.get("content", "") for item in subtitles]
     transcript_path.write_text("\n".join(lines), encoding="utf-8")
+
+    # 带时间戳的版本
+    from src.core.transcriber import format_timestamp, format_srt
+    timestamped_lines = []
+    for item in subtitles:
+        ts_from = item.get("from", 0)
+        ts_to = item.get("to", 0)
+        content = item.get("content", "")
+        timestamped_lines.append(f"[{format_timestamp(ts_from)} -> {format_timestamp(ts_to)}] {content}")
+    ts_path = video_dir / "转录文稿_带时间戳.txt"
+    ts_path.write_text("\n".join(timestamped_lines), encoding="utf-8")
+
+    # SRT 字幕版本
+    srt_path = video_dir / "字幕.srt"
+    srt_path.write_text(format_srt(subtitles), encoding="utf-8")
 
     return {
         "success": True,
         "bv": bvid,
         "title": title,
         "transcript": str(transcript_path),
+        "transcript_ts": str(ts_path),
+        "srt": str(srt_path),
         "audio": str(audio_path) if audio_path.exists() else None,
         "lines": len(lines),
     }
@@ -158,6 +175,8 @@ def cli_main():
     parser.add_argument("--language", default="zh", help="Whisper 语言提示（默认: zh）")
     parser.add_argument("--model", default="small", help="Whisper 模型大小")
     parser.add_argument("--save-audio", default="", help="保存音频文件到指定路径")
+    parser.add_argument("--format", choices=["text", "timestamps", "srt", "all"], default="all",
+                        help="输出格式: text=纯文本, timestamps=带时间戳, srt=SRT字幕, all=全部（默认）")
     args = parser.parse_args()
 
     result = run_transcription(args.url, args.model)
@@ -165,14 +184,26 @@ def cli_main():
         print(result["error"], file=sys.stderr)
         sys.exit(1)
 
-    if args.text_only:
+    if args.format == "text":
         transcript_path = result.get("transcript")
         if transcript_path:
             text = Path(transcript_path).read_text(encoding="utf-8")
             print(text)
+    elif args.format == "timestamps":
+        ts_path = result.get("transcript_ts")
+        if ts_path:
+            text = Path(ts_path).read_text(encoding="utf-8")
+            print(text)
+    elif args.format == "srt":
+        srt_path = result.get("srt")
+        if srt_path:
+            text = Path(srt_path).read_text(encoding="utf-8")
+            print(text)
     else:
         print(f"✓ 转录完成: {result.get('title', '')}")
         print(f"  文稿: {result.get('transcript', '')}")
+        print(f"  时间戳: {result.get('transcript_ts', '')}")
+        print(f"  SRT字幕: {result.get('srt', '')}")
         print(f"  音频: {result.get('audio', '无')}")
         print(f"  行数: {result.get('lines', 0)}")
 
