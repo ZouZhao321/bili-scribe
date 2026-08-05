@@ -259,7 +259,7 @@ class TestRootEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["service"] == "bilibili-transcript-api"
+        assert data["service"] == "bili-scribe-api"
 
 
 class TestOpenAPI:
@@ -275,6 +275,6 @@ class TestOpenAPI:
         resp = api_client.get("/openapi.json")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["info"]["title"] == "Bilibili Transcript API"
+        assert data["info"]["title"] == "bili-scribe API"
         assert "/api/v1/health" in str(data["paths"])
         assert "/api/v1/transcribe" in str(data["paths"])

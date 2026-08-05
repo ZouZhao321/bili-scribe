@@ -1,11 +1,14 @@
 [project]
-name = "bilibili-transcript"
+name = "bili-scribe"
 version = "1.0.0"
 description = "B站视频字幕提取 + Whisper 本地语音转录工具"
 requires-python = ">=3.10"
 dependencies = ["faster-whisper>=1.0.0", "fastapi>=0.141.0", "uvicorn>=0.52.0"]
 
 [project.scripts]
+bili-scribe = "src.cli.main:main"
+
+# 兼容旧入口
 bili-transcript = "src.core.runner:cli_main"
 
 [[tool.uv.index]]
