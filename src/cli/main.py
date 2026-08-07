@@ -53,9 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_trans.add_argument(
         "-m",
         "--model",
-        default="small",
+        default="tiny",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper 模型（默认: small）",
+        help="Whisper 模型（默认: tiny）",
     )
     p_trans.add_argument(
         "-l",
@@ -111,9 +111,9 @@ def build_parser() -> argparse.ArgumentParser:
     q_add.add_argument(
         "model",
         nargs="?",
-        default="small",
+        default="tiny",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper 模型（默认: small）",
+        help="Whisper 模型（默认: tiny）",
     )
 
     qsub.add_parser("status", help="查看队列状态")
@@ -154,9 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_batch.add_argument(
         "-m",
         "--model",
-        default="small",
+        default="tiny",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper 模型（默认: small）",
+        help="Whisper 模型（默认: tiny）",
     )
     p_batch.add_argument(
         "-n",
