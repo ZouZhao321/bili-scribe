@@ -614,9 +614,9 @@ def main():
     p_add.add_argument(
         "model",
         nargs="?",
-        default="tiny",
+        default="base",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="模型大小（默认: tiny）",
+        help="模型大小（默认: base）",
     )
 
     # cron

@@ -83,7 +83,7 @@ def main() -> None:
             print(f"  {'将' if dry_run else '已'}删除 {name}: {count} 个")
     if to_rename:
         print(f"  {'将' if dry_run else '已'}改名 视频链接.txt → 视频信息.txt: {to_rename} 个")
-    print(f"  {'将' if dry_run else '已'}加入队列: {len(to_queue)} 个 (模型: tiny)")
+    print(f"  {'将' if dry_run else '已'}加入队列: {len(to_queue)} 个 (模型: base)")
 
     if dry_run:
         return
@@ -100,13 +100,13 @@ def main() -> None:
     added = 0
     for bvid in to_queue:
         result = subprocess.run(
-            [sys.executable, str(script_path), "add", bvid, "tiny"],
+            [sys.executable, str(script_path), "add", bvid, "base"],
             capture_output=True, text=True,
         )
         if result.returncode == 0:
             added += 1
 
-    log_operation(f"[QUEUE] 批量添加 {added}/{len(to_queue)} 个任务到队列 (模型: tiny)")
+    log_operation(f"[QUEUE] 批量添加 {added}/{len(to_queue)} 个任务到队列 (模型: base)")
     print(f"\n✓ 迁移完成: {added} 个任务已加入队列")
 
 
