@@ -25,8 +25,10 @@
 """
 
 import argparse
+import os
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -49,6 +51,7 @@ from src.core.queue_store import (  # noqa: E402
     RED,
     YELLOW,
     FileLock,
+    JsonLogger,
     TaskStore,
     get_available_memory_mb,
     get_cpu_usage,
@@ -181,12 +184,17 @@ def cmd_add(args):
 
 def cmd_cron(_args):
     """定时处理队列（由 cron 每 10 分钟调用一次）."""
+    pid = os.getpid()
+    cron_start_time = time.time()
     store = TaskStore(TASKS_FILE)
     lock = FileLock(LOCK_FILE)
 
     if not lock.acquire():
         logger.info("无法获取锁，另一个 cron 进程正在运行")
+        JsonLogger.write("cron_skip", reason="lock_busy", pid=pid)
         return
+
+    JsonLogger.write("cron_start", pid=pid, lock="acquired")
 
     try:
         # 检查是否有运行中的任务
@@ -211,6 +219,7 @@ def cmd_cron(_args):
                             logger.info("任务 %s 超时，放回队列（重试 %d/%d）", running_id, retries, MAX_RETRIES)
                     else:
                         # 正常运行中，跳过
+                        JsonLogger.write("cron_end", pid=pid, dur_s=round(time.time() - cron_start_time, 2))
                         return
                 except ValueError:
                     pass
@@ -222,6 +231,7 @@ def cmd_cron(_args):
         # 取下一个待处理任务
         task_id = store.next_pending()
         if not task_id:
+            JsonLogger.write("cron_end", pid=pid, dur_s=round(time.time() - cron_start_time, 2))
             return
 
         task = store.get(task_id)
@@ -232,6 +242,8 @@ def cmd_cron(_args):
         cpu = get_cpu_usage()
         if cpu > CPU_THRESHOLD:
             logger.info("CPU %d%% > %d%%，跳过任务 %s", cpu, CPU_THRESHOLD, task_id)
+            JsonLogger.write("task_skip", id=task_id, reason="cpu", mem=get_available_memory_mb(), cpu=cpu, model=task.get("model", "small"))
+            JsonLogger.write("cron_end", pid=pid, dur_s=round(time.time() - cron_start_time, 2))
             return
 
         url = task["url"]
@@ -249,6 +261,8 @@ def cmd_cron(_args):
                 model,
                 task_id,
             )
+            JsonLogger.write("task_skip", id=task_id, reason="mem", mem=mem_avail, cpu=cpu, model=model)
+            JsonLogger.write("cron_end", pid=pid, dur_s=round(time.time() - cron_start_time, 2))
             return
 
         # 标记运行中
@@ -259,6 +273,9 @@ def cmd_cron(_args):
         lock.release()
 
     # 释放锁后执行转录（不阻塞其他 cron 进程）
+    mem_before = get_available_memory_mb()
+    cpu_before = get_cpu_usage()
+    JsonLogger.write("task_start", id=task_id, model=model, url=url, mem_before=mem_before, cpu_before=cpu_before)
     logger.info("▶ 开始处理: %s  URL: %s  Model: %s", task_id, url, model)
 
     result = run_transcription(url, model, task_id)
@@ -272,6 +289,18 @@ def cmd_cron(_args):
                 status="done",
                 completed_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
+            dur_s = round(time.time() - cron_start_time, 2)
+            mem_after = get_available_memory_mb()
+            JsonLogger.write(
+                "task_end",
+                id=task_id,
+                dur_s=dur_s,
+                seg=result.get("lines", 0),
+                avg_p=result.get("avg_prob", 0),
+                mem_peak=mem_before - mem_after,
+                mem_after=mem_after,
+                cpu_avg=get_cpu_usage(),
+            )
             logger.info("✓ 完成: %s  (%s 行)", task_id, result.get("lines", 0))
 
             # 转录成功 → 提交到临时 git 分支并推送
@@ -284,11 +313,14 @@ def cmd_cron(_args):
 
             if retries >= MAX_RETRIES:
                 store.update(task_id, status="failed", retries=retries, last_error=error)
+                JsonLogger.write("task_fail", id=task_id, error=error)
                 logger.error("✗ 失败（已达最大重试次数）: %s  %s", task_id, error)
             else:
                 store.update(task_id, status="pending", retries=retries, last_error=error, started_at=None)
+                JsonLogger.write("task_retry", id=task_id, retry=retries, error=error)
                 logger.info("↻ 失败，放回队列（重试 %d/%d）: %s  %s", retries, MAX_RETRIES, task_id, error)
     finally:
+        JsonLogger.write("cron_end", pid=pid, dur_s=round(time.time() - cron_start_time, 2))
         lock.release()
 
 
@@ -582,9 +614,9 @@ def main():
     p_add.add_argument(
         "model",
         nargs="?",
-        default="small",
+        default="base",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="模型大小（默认: small）",
+        help="模型大小（默认: base）",
     )
 
     # cron

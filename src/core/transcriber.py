@@ -3,6 +3,8 @@
 这是项目中唯一与 faster-whisper 交互的模块，不包含任何 B 站 API 逻辑。
 """
 
+import math
+
 
 def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = "small") -> list | None:
     """使用 faster-whisper 转录音频文件。
@@ -14,8 +16,8 @@ def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = 
             "medium" 或 "large-v3"。
 
     返回：
-        包含 "from"、"to" 和 "content" 键的片段字典列表，
-        转录失败返回 None。
+        包含 "from"、"to"、"content"、"avg_logprob"、
+        "no_speech_prob" 键的片段字典列表，转录失败返回 None。
     """
     try:
         from faster_whisper import WhisperModel
@@ -33,11 +35,51 @@ def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = 
 
         result = []
         for seg in segments:
-            result.append({"from": seg.start, "to": seg.end, "content": seg.text.strip()})
+            result.append({
+                "from": seg.start,
+                "to": seg.end,
+                "content": seg.text.strip(),
+                "avg_logprob": seg.avg_logprob,
+                "no_speech_prob": seg.no_speech_prob,
+            })
         return result
     except Exception as e:  # noqa: BLE001
         print(f"Whisper 错误: {e}", file=__import__("sys").stderr)
         return None
+
+
+def format_transcript(segments: list[dict], model: str = "tiny", speaker: str = "说话人 A") -> str:
+    """将转录片段格式化为带说话人、模型、置信度的文稿。
+
+    格式：
+        [说话人 A] [tiny] [0.82] 00:00:01,230 - 00:00:52,100
+        大家好，今天我们来聊聊网文写作。首先……
+
+    参数：
+        segments: 转录片段列表（每段含 from/to/content/avg_logprob）。
+        model: 转录使用的模型名称。
+        speaker: 说话人标签（后续 diarize 阶段换为真实说话人）。
+
+    返回：
+        格式化后的文稿字符串。
+    """
+    lines = []
+    for seg in segments:
+        start = seg.get("from", 0)
+        end = seg.get("to", 0)
+        content = seg.get("content", "").strip()
+        if not content:
+            continue
+        avg_logprob = seg.get("avg_logprob", 0)
+        # 将 logprob 转换为 0~1 置信度
+        conf = round(math.exp(avg_logprob), 2) if avg_logprob else 0.0
+        conf = min(conf, 1.0)  # 截断到 1.0
+        from_ts = format_srt_timestamp(start)
+        to_ts = format_srt_timestamp(end)
+        lines.append(f"[{speaker}] [{model}] [{conf:.2f}] {from_ts} - {to_ts}")
+        lines.append(content)
+        lines.append("")
+    return "\n".join(lines)
 
 
 def format_timestamp(seconds: float) -> str:

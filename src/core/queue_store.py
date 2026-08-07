@@ -21,6 +21,7 @@ FAILED_DIR = QUEUE_DIR / "failed"
 LOCK_FILE = QUEUE_DIR / "queue.lock"
 TASKS_FILE = QUEUE_DIR / "tasks.json"
 LOG_FILE = QUEUE_DIR / "cron.log"
+OPERATIONS_LOG = QUEUE_DIR / "operations.log"
 
 MAX_RETRIES = 3
 TIMEOUT = 6 * 3600  # 6 小时
@@ -49,6 +50,50 @@ def get_logger():
 
 
 logger = get_logger()
+
+# ---------------------------------------------------------------------------
+# 结构化日志（JSON Lines）
+# ---------------------------------------------------------------------------
+JSONL_FILE = QUEUE_DIR / "cron.jsonl"
+
+
+class JsonLogger:
+    """结构化日志 — 写入 JSON Lines 格式到 ~/.queue/cron.jsonl.
+
+    每行一个 JSON 对象，固定字段:
+      t — ISO 格式时间戳
+      e — 事件名
+    其他字段按事件类型不同。
+
+    事件列表:
+      cron_start  — cron 进程启动，字段: pid, lock
+      cron_skip   — cron 跳过，字段: reason
+      cron_end    — cron 结束，字段: pid, dur_s
+      task_start  — 任务开始，字段: id, model, url, mem_before, cpu_before
+      task_end    — 任务完成，字段: id, dur_s, seg, avg_p, mem_peak, mem_after, cpu_avg
+      task_skip   — 任务跳过，字段: id, reason, mem, cpu, model
+      task_retry  — 任务重试，字段: id, retry, error
+      task_fail   — 任务失败，字段: id, error
+    """
+
+    path = JSONL_FILE
+
+    @classmethod
+    def write(cls, event: str, **kwargs):
+        """写入一条结构化日志。
+
+        参数:
+            event: 事件名（如 cron_start, task_end）
+            **kwargs: 事件相关字段
+        """
+        try:
+            cls.path.parent.mkdir(parents=True, exist_ok=True)
+            record = {"t": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "e": event, **kwargs}
+            with open(cls.path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+
 
 # ---------------------------------------------------------------------------
 # 颜色（终端输出用）
