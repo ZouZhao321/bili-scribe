@@ -53,9 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_trans.add_argument(
         "-m",
         "--model",
-        default="small",
+        default="base",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper 模型（默认: small）",
+        help="Whisper 模型（默认: base）",
     )
     p_trans.add_argument(
         "-l",
@@ -111,9 +111,9 @@ def build_parser() -> argparse.ArgumentParser:
     q_add.add_argument(
         "model",
         nargs="?",
-        default="small",
+        default="base",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper 模型（默认: small）",
+        help="Whisper 模型（默认: base）",
     )
 
     qsub.add_parser("status", help="查看队列状态")
@@ -154,9 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_batch.add_argument(
         "-m",
         "--model",
-        default="small",
+        default="base",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper 模型（默认: small）",
+        help="Whisper 模型（默认: base）",
     )
     p_batch.add_argument(
         "-n",
@@ -206,6 +206,16 @@ def build_parser() -> argparse.ArgumentParser:
     # -- version --------------------------------------------------------------
     sub.add_parser("version", help="显示版本信息")
 
+    # -- transcript-to-srt ----------------------------------------------------
+    p_srt = sub.add_parser("transcript-to-srt", help="将转录文稿转换为 SRT 字幕")
+    p_srt.add_argument("input", help="转录文稿.txt 路径")
+    p_srt.add_argument(
+        "output",
+        nargs="?",
+        default="",
+        help="输出 SRT 文件路径（默认: 与输入同目录，后缀 .srt）",
+    )
+
     return parser
 
 
@@ -246,6 +256,45 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
             if audio:
                 print(f"  音频:     {audio}")
             print(f"  文稿行数: {result.get('lines', 0)}")
+
+
+def cmd_transcript_to_srt(args: argparse.Namespace) -> None:
+    """处理 transcript-to-srt 子命令."""
+    import re
+
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print(f"❌ 文件不存在: {input_path}", file=sys.stderr)
+        sys.exit(1)
+
+    output_path = Path(args.output) if args.output else input_path.with_suffix(".srt")
+
+    content = input_path.read_text(encoding="utf-8")
+
+    # 解析格式: [说话人 A] [tiny] [0.82] HH:MM:SS,mmm - HH:MM:SS,mmm
+    # 下一行是文本内容
+    pattern = re.compile(r"^\[.+?\] \[.+?\] \[.+?\] (\d{2}:\d{2}:\d{2},\d{3}) - (\d{2}:\d{2}:\d{2},\d{3})$")
+
+    lines = content.strip().split("\n")
+    srt_lines = []
+    index = 1
+
+    for i, line in enumerate(lines):
+        m = pattern.match(line)
+        if m:
+            from_ts = m.group(1)
+            to_ts = m.group(2)
+            # 下一行是文本
+            text = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            srt_lines.append(f"{index}")
+            srt_lines.append(f"{from_ts} --> {to_ts}")
+            srt_lines.append(text)
+            srt_lines.append("")
+            index += 1
+
+    output_path.write_text("\n".join(srt_lines), encoding="utf-8")
+    print(f"✓ SRT 字幕已生成: {output_path}")
+    print(f"  共 {index - 1} 条字幕")
 
 
 def cmd_queue(args: argparse.Namespace) -> None:
@@ -446,6 +495,7 @@ def main() -> None:
         "batch": cmd_batch,
         "serve": cmd_serve,
         "info": cmd_info,
+        "transcript-to-srt": cmd_transcript_to_srt,
     }
 
     handler = cmd_map.get(args.command)
