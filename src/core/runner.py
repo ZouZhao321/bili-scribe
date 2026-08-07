@@ -5,6 +5,7 @@
 不包含队列逻辑，供 bili_queue.py 和 fetch_transcript.py 共用。
 """
 
+import math
 import urllib.error
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from src.core.bilibili import (
     get_subtitle_url,
     get_video_info,
 )
-from src.core.transcriber import whisper_transcribe
+from src.core.transcriber import format_transcript, format_srt, whisper_transcribe
 
 # ---------------------------------------------------------------------------
 # 路径
@@ -27,6 +28,55 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "out"
 
 TIMEOUT = 6 * 3600  # 6 小时
+
+
+def _write_video_info(video_dir: Path, bvid: str, title: str, info: dict) -> None:
+    """写入视频信息文件（纯视频元数据，不含转录信息）."""
+    duration = info.get("duration", 0)
+    owner = info.get("owner", {})
+    stat = info.get("stat", {})
+    
+    # 时长格式化
+    h, m = divmod(duration, 3600)
+    m, s = divmod(m, 60)
+    dur_str = f"{duration}秒"
+    if h > 0:
+        dur_str += f" ({h}:{m:02d}:{s:02d})"
+    else:
+        dur_str += f" ({m}:{s:02d})"
+    
+    # 发布时间
+    pubdate = info.get("pubdate", 0)
+    pubdate_str = datetime.fromtimestamp(pubdate).strftime("%Y-%m-%d %H:%M:%S") if pubdate else "未知"
+    
+    # 播放量格式化
+    def fmt_num(n: int) -> str:
+        if n >= 10000:
+            return f"{n/10000:.1f}万"
+        return str(n)
+    
+    lines = [
+        f"视频链接: https://www.bilibili.com/video/{bvid}/",
+        f"BV号: {bvid}",
+        f"AV号: AV{info.get('aid', '')}",
+        f"标题: {title}",
+        f"UP主: {owner.get('name', '未知')}",
+        f"UP主UID: {owner.get('mid', '')}",
+        f"发布时间: {pubdate_str}",
+        f"时长: {dur_str}",
+        f"分区: {info.get('tname', '')}",
+        f"标签: {info.get('videos', '')}",
+        f"简介: {info.get('desc', '')}",
+        "",
+        f"播放: {fmt_num(stat.get('view', 0))}",
+        f"弹幕: {fmt_num(stat.get('danmaku', 0))}",
+        f"评论: {fmt_num(stat.get('reply', 0))}",
+        f"点赞: {fmt_num(stat.get('like', 0))}",
+        f"硬币: {fmt_num(stat.get('coin', 0))}",
+        f"收藏: {fmt_num(stat.get('favorite', 0))}",
+        f"转发: {fmt_num(stat.get('share', 0))}",
+    ]
+    (video_dir / "视频信息.txt").write_text("\n".join(lines), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -68,17 +118,8 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
     video_dir = OUTPUT_DIR / filename
     video_dir.mkdir(parents=True, exist_ok=True)
 
-    # 5. 保存链接信息
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    link_info = (
-        f"视频链接: https://www.bilibili.com/video/{bvid}/\n"
-        f"BV号: {bvid}\n"
-        f"标题: {title}\n"
-        f"时长: {duration}秒\n"
-        f"转录模型: {model}\n"
-        f"转录时间: {now}\n"
-    )
-    (video_dir / "视频链接.txt").write_text(link_info, encoding="utf-8")
+    # 5. 保存视频信息（元数据 + 热度，不含转录信息）
+    _write_video_info(video_dir, bvid, title, info)
 
     # 6. 执行转录（三级降级）
     audio_path = video_dir / "audio.m4s"
@@ -125,18 +166,27 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
     if not subtitles:
         return {"success": False, "error": "该视频没有可用字幕"}
 
-    # 7. 写入 SRT 字幕（仅保留标准字幕格式）
-    from src.core.transcriber import format_srt
-    srt_path = video_dir / "字幕.srt"
-    srt_path.write_text(format_srt(subtitles), encoding="utf-8")
+    # 7. 写入文稿
+    # 确保 CC/AI 字幕也包含置信度字段（默认 0.99）
+    for s in subtitles:
+        if "avg_logprob" not in s:
+            s["avg_logprob"] = -0.01  # exp(-0.01) ≈ 0.99
+    
+    transcript_text = format_transcript(subtitles, model=model)
+    transcript_path = video_dir / "转录文稿.txt"
+    transcript_path.write_text(transcript_text, encoding="utf-8")
+
+    # 计算平均置信度
+    avg_conf = sum(s.get("avg_logprob", 0) for s in subtitles) / len(subtitles)
 
     return {
         "success": True,
         "bv": bvid,
         "title": title,
-        "srt": str(srt_path),
+        "transcript": str(transcript_path),
         "audio": str(audio_path) if audio_path.exists() else None,
         "lines": len(subtitles),
+        "avg_prob": round(math.exp(avg_conf), 2) if avg_conf else 0,
     }
 
 
