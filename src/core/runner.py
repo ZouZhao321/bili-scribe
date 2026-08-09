@@ -18,6 +18,7 @@ from src.core.bilibili import (
     get_cid,
     get_subtitle_url,
     get_video_info,
+    get_video_url,
 )
 from src.core.transcriber import format_transcript, format_srt, whisper_transcribe
 
@@ -155,8 +156,25 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
         try:
             audio_url = get_audio_url(bvid, cid)
             if audio_url:
+                # DASH 格式：直接下载音频流
                 referer = f"https://www.bilibili.com/video/{bvid}/"
                 download_audio(audio_url, str(audio_path), referer)
+            else:
+                # DASH 不可用，回退到 FLV 格式 → ffmpeg 提取音频
+                video_url = get_video_url(bvid, cid)
+                if video_url:
+                    video_path = video_dir / "video.flv"
+                    referer = f"https://www.bilibili.com/video/{bvid}/"
+                    download_audio(video_url, str(video_path), referer)
+                    if video_path.exists():
+                        import subprocess
+                        subprocess.run(
+                            ["ffmpeg", "-y", "-i", str(video_path),
+                             "-vn", "-acodec", "copy", "-f", "mp4", str(audio_path)],
+                            check=True, capture_output=True,
+                        )
+                        video_path.unlink()  # 删除视频文件，保留音频
+            if audio_path.exists():
                 result = whisper_transcribe(str(audio_path), "zh", model)
                 if result:
                     subtitles = result
