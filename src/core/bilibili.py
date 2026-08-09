@@ -185,6 +185,26 @@ def get_audio_url(bvid: str, cid: str) -> str | None:
     return None
 
 
+def get_video_url(bvid: str, cid: str) -> str | None:
+    """从 B 站 playurl API 获取 FLV 视频流 URL（DASH 不可用时的回退方案）。
+
+    参数：
+        bvid: 视频的 12 位 BV ID。
+        cid: 视频分 P 的 CID。
+
+    返回：
+        FLV 视频流 URL，如果不可用则返回 None。
+    """
+    url = f"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&fnval=1&qn=64"
+    data = api_get(url)
+    if data.get("code") != 0:
+        return None
+    durl = data.get("data", {}).get("durl", [])
+    if durl:
+        return durl[0].get("url")
+    return None
+
+
 def download_audio(audio_url: str, output_path: str, referer: str = "") -> bool:
     """使用分块读取将音频流下载到本地文件。
 
