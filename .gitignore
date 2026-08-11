@@ -27,4 +27,4 @@ library/
 .worktree/
 
 .env
-.env.*
+.env.*.worktree/
