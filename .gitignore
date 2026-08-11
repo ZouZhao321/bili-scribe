@@ -23,5 +23,8 @@ out/_read_out.py
 out/
 library/
 
+# Git worktree
+.worktree/
+
 .env
 .env.*

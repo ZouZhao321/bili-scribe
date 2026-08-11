@@ -10,6 +10,7 @@
 - **PR 操作**：所有 PR 创建/更新必须通过 `temp/push.sh pr-update`，禁止直接 git push
 - **凭证管理**：所有凭证存储在 `.env` 中，禁止在代码中硬编码
 - **API 调用规范**：禁止直接调用内部 API（如 `TaskStore.add()`、`queue_store` 等），必须使用封装后的 CLI 命令（`bili-scribe queue add`、`bili-scribe batch` 等）
+- **Git Worktree**：所有 git worktree 必须放在 `.worktree/` 目录下，禁止在其他位置创建。命名格式：`.worktree/<分支名>`（斜杠替换为短横线，如 `feat/docker-frontend` → `.worktree/feat-docker-frontend`）
 
 ## 用户偏好（默认值）
 
@@ -42,6 +43,12 @@
 2. 执行 `.venv/bin/bili-scribe queue status`
 3. 展示结果
 
+### 创建并行开发环境（Git Worktree）
+
+1. `git worktree add .worktree/<分支名> -b <新分支名>`（已有分支不加 `-b`）
+2. 在 worktree 中执行 `uv venv && uv pip install -e ".[dev]"` 初始化环境
+3. 后续在该 worktree 中开发，与原工作区完全隔离（各自拥有独立的 `.venv`、`out/`、未提交修改）
+
 ## 项目目录结构
 
 > 仅记录目录，文件易变不在此列。
@@ -62,6 +69,7 @@
 | `notes/` | 卡片盒子笔记，按日期命名 |
 | `.pi/` | Pi 代理配置：settings.json、扩展、npm 包、会话记忆 |
 | `.agents/` | Pi Agent skills 技能定义 |
+| `.worktree/` | Git worktree 隔离目录，每个子目录对应一个分支的独立工作区 |
 | `.venv/` | Python 虚拟环境（uv 管理） |
 
 ## 工具使用规则
