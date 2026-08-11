@@ -1,0 +1,61 @@
+# bili-scribe 生产部署配置
+#
+# 使用方法:
+#   docker compose up -d              # 启动
+#   docker compose logs -f            # 查看日志
+#   docker compose down               # 停止
+#   docker compose build --no-cache   # 重建镜像
+#
+# 目录结构:
+#   ./out/       — 转录文稿输出（挂载到宿主机）
+#   ./tasks/     — 任务队列持久化（容器重启不丢失）
+
+version: "3.8"
+
+services:
+  bili-scribe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bili-scribe:1.0.0
+    container_name: bili-scribe
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # 转录文稿输出目录
+      - ./out:/app/out
+      # 任务队列持久化（容器重启后恢复未完成任务）
+      - ./tasks:/app/tasks
+
+    environment:
+      - BILI_SCRIBE_OUTPUT_DIR=/app/out
+      - BILI_SCRIBE_TASKS_DIR=/app/tasks
+      # Whisper 模型缓存目录（可选，默认 ~/.cache/huggingface）
+      # - HF_HOME=/app/.cache/huggingface
+
+    # 内存限制（Whisper 转录需要较多内存，根据模型调整）
+    # tiny/base: 1GB, small: 2GB, medium: 4GB, large-v3: 6GB
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
