@@ -6,9 +6,10 @@
 
 ## 约束规则
 
-- **GitHub 推送**：当前服务器无法直连 GitHub，必须使用 `temp/push.sh` 中转，禁止自行编写推送脚本
-- **PR 操作**：所有 PR 创建/更新必须通过 `temp/push.sh pr-update`，禁止直接 git push
+- **GitHub 推送**：通过 tinyproxy 代理直连 GitHub（见下方代理配置），无需中转脚本
+- **代理配置**：Git 已全局配置 `http.proxy` / `https.proxy` 指向 `43.159.133.219:8888`（tinyproxy），账号密码见 `.env` 中的 `TINYPROXY_USER` / `TINYPROXY_PASS`
 - **凭证管理**：所有凭证存储在 `.env` 中，禁止在代码中硬编码
+- **PR 操作**：通过 GitHub API 直接操作（使用 `GITHUB_TOKEN`），无需中转脚本
 - **API 调用规范**：禁止直接调用内部 API（如 `TaskStore.add()`、`queue_store` 等），必须使用封装后的 CLI 命令（`bili-scribe queue add`、`bili-scribe batch` 等）
 - **Git Worktree**：所有 git worktree 必须放在 `.worktree/` 目录下，禁止在其他位置创建。命名格式：`.worktree/<分支名>`（斜杠替换为短横线，如 `feat/docker-frontend` → `.worktree/feat-docker-frontend`）
 
