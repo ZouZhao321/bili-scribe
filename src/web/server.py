@@ -1,14 +1,19 @@
 """bili-scribe API — FastAPI 应用入口。"""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from src.web.routes.health import router as health_router
 from src.web.routes.tasks import router as tasks_router
 from src.web.routes.transcribe import router as transcribe_router
 from src.web.routes.video import router as video_router
 from src.web.worker import worker
+
+# 静态文件目录（相对于本文件）
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -37,18 +42,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 注册路由
+# ── API 路由（先注册，优先级高于静态文件） ──
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(video_router, prefix="/api/v1")
 app.include_router(transcribe_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
 
-
-@app.get("/")
-async def root():
-    """根端点 — 返回服务状态。
-
-    返回：
-        dict: 服务名称和状态指示。
-    """
-    return {"status": "ok", "service": "bili-scribe-api"}
+# ── 前端 SPA（最后挂载，/ 指向 index.html） ──
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
