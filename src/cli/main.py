@@ -103,50 +103,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # -- queue ----------------------------------------------------------------
-    p_queue = sub.add_parser("queue", help="管理持久化转录队列")
+    p_queue = sub.add_parser("queue", help="管理持久化转录队列（已废弃，请使用 HTTP API）")
     qsub = p_queue.add_subparsers(dest="queue_cmd", help="队列操作")
 
-    q_add = qsub.add_parser("add", help="添加任务到队列")
-    q_add.add_argument("url", help="B站视频链接或 BV 号")
-    q_add.add_argument(
-        "model",
-        nargs="?",
-        default="base",
-        choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper 模型（默认: base）",
-    )
-
-    qsub.add_parser("status", help="查看队列状态")
-    qsub.add_parser("cron", help="定时处理队列（由 cron 调用）")
-
-    q_list = qsub.add_parser("list", help="列出任务")
-    q_list.add_argument(
-        "status",
-        nargs="?",
-        default=None,
-        choices=["pending", "running", "done", "failed"],
-        help="按状态过滤",
-    )
-
-    q_retry = qsub.add_parser("retry", help="重试失败任务")
-    q_retry.add_argument("task_id", help="任务 ID")
-
-    q_remove = qsub.add_parser("remove", help="删除任务")
-    q_remove.add_argument("task_id", help="任务 ID")
-
-    qsub.add_parser("cancel", help="取消当前运行的任务")
-
-    q_clear = qsub.add_parser("clear", help="清空队列")
-    q_clear.add_argument(
-        "target",
-        nargs="?",
-        default=None,
-        choices=["pending", "failed"],
-        help="清空指定类型（默认: 提示确认）",
-    )
-
-    qsub.add_parser("install-cron", help="安装 crontab 调度（每 10 分钟）")
-    qsub.add_parser("uninstall-cron", help="卸载 crontab 调度")
+    for cmd_name in ["add", "status", "list", "retry", "remove", "cancel", "clear"]:
+        p = qsub.add_parser(cmd_name, help=f"（已废弃）{cmd_name}")
+        if cmd_name == "add":
+            p.add_argument("url", nargs="?", default="", help="B站视频链接")
+            p.add_argument("model", nargs="?", default="base", help="模型")
+        elif cmd_name in ("retry", "remove"):
+            p.add_argument("task_id", nargs="?", default="", help="任务 ID")
+        elif cmd_name == "list":
+            p.add_argument("status", nargs="?", default=None, help="状态过滤")
+        elif cmd_name == "clear":
+            p.add_argument("target", nargs="?", default=None, help="目标类型")
 
     # -- batch ----------------------------------------------------------------
     p_batch = sub.add_parser("batch", help="批量下载合集内所有视频")
@@ -305,38 +275,9 @@ def cmd_queue(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     # 导入 bili_queue 模块，将参数转发
-    from src.cli.bili_queue import (
-        cmd_add,
-        cmd_cancel,
-        cmd_clear,
-        cmd_cron,
-        cmd_install_cron,
-        cmd_list,
-        cmd_remove,
-        cmd_retry,
-        cmd_status,
-        cmd_uninstall_cron,
-    )
+    from src.cli.bili_queue import _deprecated
 
-    cmd_map = {
-        "add": cmd_add,
-        "cron": cmd_cron,
-        "status": cmd_status,
-        "list": cmd_list,
-        "retry": cmd_retry,
-        "remove": cmd_remove,
-        "cancel": cmd_cancel,
-        "clear": cmd_clear,
-        "install-cron": cmd_install_cron,
-        "uninstall-cron": cmd_uninstall_cron,
-    }
-
-    handler = cmd_map.get(args.queue_cmd)
-    if handler:
-        handler(args)
-    else:
-        print(f"未知的 queue 子命令: {args.queue_cmd}")
-        sys.exit(1)
+    _deprecated(args)
 
 
 def cmd_batch(args: argparse.Namespace) -> None:
