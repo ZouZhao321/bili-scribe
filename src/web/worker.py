@@ -6,11 +6,19 @@ import json
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from typing import Any
 
 # 导入核心转录逻辑
 from src.core.runner import run_transcription
+from src.core.queue_store import (
+    CPU_THRESHOLD,
+    MEMORY_THRESHOLD,
+    MODEL_MEMORY_REQUIREMENTS,
+    get_available_memory_mb,
+    get_cpu_usage,
+)
 from src.web.models import (
     OutputFormat,
     ProgressPhase,
@@ -20,8 +28,8 @@ from src.web.models import (
 from src.web.queue import queue
 from src.web.storage import storage
 
-# 轮询间隔（秒）
-POLL_INTERVAL = 2.0
+# 轮询间隔（秒）：无任务或资源不足时等待时间
+POLL_INTERVAL = 30.0
 
 
 def _progress(
@@ -258,6 +266,27 @@ class Worker:
         """检查工作者线程当前是否活跃。"""
         return self._running
 
+    def _check_resources(self, model: str) -> tuple[bool, str]:
+        """检查 CPU 和内存是否满足任务执行条件.
+
+        参数：
+            model: Whisper 模型名称（用于内存需求计算）
+
+        返回：
+            (是否满足, 不满足原因) 元组
+        """
+        cpu = get_cpu_usage()
+        if cpu > CPU_THRESHOLD:
+            return False, f"CPU {cpu}% > 阈值 {CPU_THRESHOLD}%"
+
+        mem_avail = get_available_memory_mb()
+        mem_required = MODEL_MEMORY_REQUIREMENTS.get(model, 2000)
+        mem_needed = int(mem_required * MEMORY_THRESHOLD)
+        if mem_avail < mem_needed:
+            return False, f"内存不足: 可用 {mem_avail}MB < 需要 {mem_needed}MB (模型 {model})"
+
+        return True, ""
+
     def _run(self) -> None:
         """主工作循环 — 轮询队列并处理任务。
 
@@ -277,6 +306,21 @@ class Worker:
                     stale_task = queue.peek(task.task_id)
                     if stale_task:
                         storage.save(stale_task)
+
+                # 检查是否有待处理任务
+                pending_tasks, _ = queue.list(status="pending", limit=1)
+                if not pending_tasks:
+                    time.sleep(POLL_INTERVAL)
+                    continue
+
+                # 资源检查：CPU 和内存
+                pending = pending_tasks[0]
+                model = pending.model.value if hasattr(pending.model, 'value') else str(pending.model)
+                ok, reason = self._check_resources(model)
+                if not ok:
+                    print(f"[worker] 资源不足，跳过: {reason}", file=sys.stderr)
+                    time.sleep(POLL_INTERVAL)
+                    continue
 
                 # 取出下一个任务
                 task = queue.dequeue()
