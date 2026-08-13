@@ -83,16 +83,30 @@ def _write_video_info(video_dir: Path, bvid: str, title: str, info: dict) -> Non
 # ---------------------------------------------------------------------------
 # 转录执行
 # ---------------------------------------------------------------------------
-def run_transcription(url: str, model: str, task_id: str = "") -> dict:
+def run_transcription(
+    url: str,
+    model: str,
+    task_id: str = "",
+    mode: str = "auto",
+    language: str = "zh",
+    page: int = 0,
+    cookie: str = "",
+) -> dict:
     """执行完整转录流程（三级降级），返回结果字典.
 
     参数:
         url: B 站视频链接或 BV ID
         model: Whisper 模型大小 (tiny/base/small/medium/large-v3)
         task_id: 任务 ID（仅用于日志上下文）
+        mode: 转录模式 (auto/subtitle/whisper/both)
+        language: Whisper 语言提示
+        page: 分 P 序号（0-indexed）
+        cookie: B 站登录 Cookie
 
     返回:
-        {"success": True, "bv": "...", "title": "...", "srt": "...", "audio": "...", "lines": N}
+        {"success": True, "bv": "...", "title": "...", "author": "...",
+         "duration": N, "source": "subtitle"|"whisper",
+         "full_text": "...", "subtitles": [...], "lines": N}
         {"success": False, "error": "..."}
     """
     # 1. 解析 BV ID
@@ -127,32 +141,36 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
 
     # 获取 CID
     try:
-        cid, _part_title, _total_pages = get_cid(bvid, 0)
+        cid, _part_title, _total_pages = get_cid(bvid, page)
     except Exception as e:
         return {"success": False, "error": f"获取 CID 失败: {e}"}
 
     subtitles = []
+    source = "whisper"  # 默认来源
 
-    # 第 1/2 级：CC/AI 字幕
-    try:
-        sub_list = get_subtitle_url(bvid, cid, "")
-        if sub_list:
-            cc_subs = [s for s in sub_list if not s.get("lan", "").startswith("ai")]
-            ai_subs = [s for s in sub_list if s.get("lan", "").startswith("ai")]
-            for sub in cc_subs + ai_subs:
-                try:
-                    sub_data = download_subtitle_json(sub["subtitle_url"])
-                    body = sub_data.get("body", [])
-                    if body:
-                        subtitles = body
-                        break
-                except urllib.error.URLError:
-                    continue
-    except Exception:
-        pass
+    # 第 1/2 级：CC/AI 字幕（mode 不是 whisper 时尝试）
+    if mode != "whisper":
+        try:
+            sub_list = get_subtitle_url(bvid, cid, cookie)
+            if sub_list:
+                cc_subs = [s for s in sub_list if not s.get("lan", "").startswith("ai")]
+                ai_subs = [s for s in sub_list if s.get("lan", "").startswith("ai")]
+                for sub in cc_subs + ai_subs:
+                    try:
+                        sub_data = download_subtitle_json(sub["subtitle_url"])
+                        body = sub_data.get("body", [])
+                        if body:
+                            subtitles = body
+                            source = "subtitle"
+                            break
+                    except urllib.error.URLError:
+                        continue
+        except Exception:
+            pass
 
-    # 第 3 级：Whisper 降级
-    if not subtitles:
+    # 第 3 级：Whisper 降级（mode 不是 subtitle 且字幕为空时，或 mode 为 both/whisper 时）
+    need_whisper = mode in ("whisper", "both") or (mode == "auto" and not subtitles)
+    if need_whisper:
         try:
             audio_url = get_audio_url(bvid, cid)
             if audio_url:
@@ -175,9 +193,14 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
                         )
                         video_path.unlink()  # 删除视频文件，保留音频
             if audio_path.exists():
-                result = whisper_transcribe(str(audio_path), "zh", model)
+                result = whisper_transcribe(str(audio_path), language, model)
                 if result:
-                    subtitles = result
+                    if mode == "both":
+                        # both 模式：Whisper 结果追加到字幕后面
+                        subtitles.extend(result)
+                    else:
+                        subtitles = result
+                    source = "whisper"
         except Exception as e:
             return {"success": False, "error": f"Whisper 转录失败: {e}"}
 
@@ -201,6 +224,11 @@ def run_transcription(url: str, model: str, task_id: str = "") -> dict:
         "success": True,
         "bv": bvid,
         "title": title,
+        "author": info.get("owner", {}).get("name", ""),
+        "duration": duration,
+        "source": source,
+        "full_text": transcript_text,
+        "subtitles": subtitles,
         "transcript": str(transcript_path),
         "audio": str(audio_path) if audio_path.exists() else None,
         "lines": len(subtitles),
