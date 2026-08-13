@@ -2,35 +2,19 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
-import os
 import sys
-import tempfile
 import threading
 import time
-import urllib.error
 import urllib.request
 from typing import Any
 
 # 导入核心转录逻辑
-from src.core.bilibili import (
-    download_audio,
-    download_subtitle_json,
-    extract_bvid,
-    get_audio_url,
-    get_cid,
-    get_subtitle_url,
-    get_video_info,
-)
-from src.core.transcriber import (
-    whisper_transcribe,
-)
+from src.core.runner import run_transcription
 from src.web.models import (
     OutputFormat,
     ProgressPhase,
     TaskStatus,
-    TranscriptMode,
     TranscriptSource,
 )
 from src.web.queue import queue
@@ -62,52 +46,6 @@ def _progress(
     task = queue.peek(task_id)
     if task:
         storage.save(task)
-
-
-def _build_result(
-    bvid: str,
-    title: str,
-    author: str,
-    duration: int,
-    source: TranscriptSource,
-    subtitles: list[dict],
-    total_pages: int,
-    page: int,
-) -> dict:
-    """构建标准化的转录结果字典。
-
-    参数：
-        bvid: 视频 BV ID。
-        title: 视频标题。
-        author: 视频作者/UP主。
-        duration: 视频时长（秒）。
-        source: 转录来源（字幕或 Whisper）。
-        subtitles: 字幕片段字典列表。
-        total_pages: 视频总页数/分 P 数。
-        page: 当前页码。
-
-    返回：
-        包含所有转录结果字段的字典。
-    """
-    entries = len(subtitles)
-
-    if source == TranscriptSource.subtitle:
-        full_text = "\n".join(item.get("content", "") for item in subtitles)
-    else:
-        full_text = "\n".join(item.get("content", "") for item in subtitles)
-
-    return {
-        "bvid": bvid,
-        "title": title,
-        "author": author,
-        "duration": duration,
-        "source": source.value,
-        "total_pages": total_pages,
-        "current_page": page,
-        "entries": entries,
-        "subtitles": subtitles,
-        "full_text": full_text,
-    }
 
 
 def _build_usage(source: TranscriptSource, model: str, elapsed: float, audio_duration: int | None = None) -> dict:
@@ -157,12 +95,8 @@ def _format_subtitles(subtitles: list[dict], fmt: OutputFormat) -> list[dict]:
 def process_task(task_id: str) -> None:
     """端到端执行单个转录任务。
 
-    实现三级降级策略：
-    1. CC 字幕（秒出）
-    2. AI 字幕（秒出）
-    3. Whisper 本地转录（CPU，较慢）
-
-    在每个阶段更新进度，完成后持久化结果。
+    调用核心引擎 run_transcription() 执行三级降级转录，
+    结果写入 out/ 目录并填充到任务 result 字段。
 
     参数：
         task_id: 要处理的任务的唯一标识符。
@@ -174,120 +108,49 @@ def process_task(task_id: str) -> None:
     start_time = time.time()
 
     try:
-        bvid = task.url
-        # 如果需要，将 URL 解析为 BV ID
-        if not bvid.startswith("BV"):
-            bvid = extract_bvid(task.url)
-
         _progress(task_id, ProgressPhase.fetching_info, 10, "正在获取视频信息")
 
-        # 获取视频信息
-        video_info = get_video_info(bvid)
-        title = video_info.get("title", bvid)
-        author = video_info.get("owner", {}).get("name", "")
-        duration = video_info.get("duration", 0)
-
-        # 获取 CID
-        cid, _part_title, total_pages = get_cid(bvid, task.page)
-
-        _progress(task_id, ProgressPhase.fetching_info, 20, f"标题: {title}")
-
-        subtitles = []
-
-        # 先尝试 CC/AI 字幕
-        if task.mode in (TranscriptMode.auto, TranscriptMode.subtitle, TranscriptMode.both):
-            sub_list = get_subtitle_url(bvid, cid, task.cookie)
-            if sub_list:
-                cc_subs = [s for s in sub_list if not s.get("lan", "").startswith("ai")]
-                ai_subs = [s for s in sub_list if s.get("lan", "").startswith("ai")]
-                ordered = cc_subs + ai_subs
-
-                for sub in ordered:
-                    lang = sub.get("lan_doc", sub.get("lan", "unknown"))
-                    _progress(task_id, ProgressPhase.fetching_info, 30, f"发现字幕: {lang}")
-                    try:
-                        sub_data = download_subtitle_json(sub["subtitle_url"])
-                        body = sub_data.get("body", [])
-                        if body:
-                            subtitles = body
-                            _progress(task_id, ProgressPhase.fetching_info, 40, f"使用字幕: {len(subtitles)} 条")
-                            break
-                    except urllib.error.URLError:
-                        continue
-
-        # Whisper 降级（或强制）
-        need_whisper = (
-            task.mode == TranscriptMode.whisper
-            or (task.mode == TranscriptMode.both and not subtitles)
-            or (task.mode == TranscriptMode.auto and not subtitles)
+        # 调用核心转录引擎（三级降级 → 写入 out/ 目录）
+        result = run_transcription(
+            url=task.url,
+            model=task.model.value,
+            task_id=task_id,
+            mode=task.mode.value,
+            language=task.language,
+            page=task.page,
+            cookie=task.cookie,
         )
 
-        whisper_result = None
-        if need_whisper:
-            _progress(task_id, ProgressPhase.downloading_audio, 50, "正在下载音频流")
-
-            referer = f"https://www.bilibili.com/video/{bvid}/"
-            audio_url = get_audio_url(bvid, cid)
-
-            if not audio_url:
-                raise RuntimeError("无法获取音频流 URL")
-
-            with tempfile.NamedTemporaryFile(suffix=".m4s", delete=False) as tmp:
-                audio_path = tmp.name
-
-            try:
-                if not download_audio(audio_url, audio_path, referer):
-                    raise RuntimeError("音频下载失败")
-
-                os.path.getsize(audio_path)
-
-                _progress(task_id, ProgressPhase.loading_model, 60, f"正在加载 Whisper 模型 ({task.model.value})")
-
-                whisper_result = whisper_transcribe(
-                    audio_path,
-                    language=task.language,
-                    model_size=task.model.value,
-                )
-
-                if not whisper_result:
-                    raise RuntimeError("Whisper 转录失败")
-
-                _progress(task_id, ProgressPhase.transcribing, 90, f"Whisper 完成: {len(whisper_result)} 个片段")
-            finally:
-                with contextlib.suppress(OSError):
-                    os.unlink(audio_path)
-
-        # 合并结果
-        if (whisper_result and task.mode == TranscriptMode.both) or whisper_result:
-            combined = _format_subtitles(whisper_result, task.output_format)
-            final_source = TranscriptSource.whisper
-            usage_source = TranscriptSource.whisper
-        else:
-            combined = _format_subtitles(subtitles, task.output_format)
-            final_source = TranscriptSource.subtitle
-            usage_source = TranscriptSource.subtitle
+        if not result["success"]:
+            raise RuntimeError(result["error"])
 
         elapsed = time.time() - start_time
 
-        result = _build_result(
-            bvid=bvid,
-            title=title,
-            author=author,
-            duration=duration,
-            source=final_source,
-            subtitles=combined,
-            total_pages=total_pages,
-            page=task.page,
-        )
+        # 构建 API 响应格式
+        source = TranscriptSource(result["source"])
+        formatted_subtitles = _format_subtitles(result["subtitles"], task.output_format)
+
+        api_result = {
+            "bvid": result["bv"],
+            "title": result["title"],
+            "author": result["author"],
+            "duration": result["duration"],
+            "source": source.value,
+            "total_pages": 1,
+            "current_page": task.page,
+            "entries": result["lines"],
+            "subtitles": formatted_subtitles,
+            "full_text": result["full_text"],
+        }
 
         usage = _build_usage(
-            source=usage_source,
+            source=source,
             model=task.model.value,
             elapsed=elapsed,
-            audio_duration=duration if task.mode != TranscriptMode.subtitle else None,
+            audio_duration=result["duration"] if source == TranscriptSource.whisper else None,
         )
 
-        queue.complete(task_id, result, usage)
+        queue.complete(task_id, api_result, usage)
         completed = queue.peek(task_id)
         if completed:
             storage.save(completed)
