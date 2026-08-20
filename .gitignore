@@ -25,6 +25,6 @@ library/
 
 # Git worktree
 .worktree/
-
+.backups/
 .env
 .env.*.worktree/
