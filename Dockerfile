@@ -9,6 +9,9 @@ LABEL org.opencontainers.image.title="bili-scribe"
 LABEL org.opencontainers.image.description="B站视频字幕提取 + Whisper 本地语音转录 HTTP API"
 LABEL org.opencontainers.image.version="1.0.0"
 
+# ── 安装 uv ──
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # ── 系统依赖 ──
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \
@@ -20,11 +23,7 @@ WORKDIR /app
 # ── Python 依赖 ──
 # 先复制依赖文件，利用 Docker 层缓存
 COPY pyproject.toml .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-    "faster-whisper>=1.0.0" \
-    "fastapi>=0.141.0" \
-    "uvicorn>=0.52.0"
+RUN uv sync --frozen --no-dev
 
 # ── 源码 ──
 COPY src/ ./src/
@@ -52,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 EXPOSE 8000
 
 # ── 入口（与开发环境完全一致） ──
-CMD ["python", "-m", "src.cli.main", "serve", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "python", "-m", "src.cli.main", "serve", "--host", "0.0.0.0", "--port", "8000"]

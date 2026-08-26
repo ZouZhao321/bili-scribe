@@ -39,7 +39,7 @@ bilibili-transcript/                  ← 主仓库
 ### 收益对比
 
 | 场景 | 单工作区 | Worktree 并行 |
-|------|----------|---------------|
+| ------ | ---------- | --------------- |
 | 切换分支 | stash → checkout → pop（可能冲突） | 直接 `cd` 到另一个目录 |
 | 依赖差异 | 每次切换重装 `.venv` | 各自独立 `.venv`，一次性安装 |
 | 并行开发 | 不可能 | 两个终端各开一个 worktree |
@@ -65,7 +65,7 @@ bilibili-transcript/                  ← 主仓库
 ### 命名约定
 
 | 分支名 | Worktree 路径 |
-|--------|--------------|
+| -------- | -------------- |
 | `main` | `.worktree/main` |
 | `feat/docker-frontend` | `.worktree/feat-docker-frontend` |
 | `feat/agents-docs-api-rule` | `.worktree/feat-agents-docs-api-rule` |
@@ -109,7 +109,7 @@ git branch -d feat/xxx
 ### 约束
 
 | 约束 | 说明 |
-|------|------|
+| ------ | ------ |
 | 同一分支只能在一个 worktree 中 | git 硬限制，`git worktree add` 时会拒绝 |
 | `.worktree/` 必须在 `.gitignore` 中 | 避免主仓库追踪 worktree 目录 |
 | 主仓库不能是裸仓库状态 | 创建 worktree 前主仓库必须在某个分支上 |

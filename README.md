@@ -49,7 +49,7 @@ uv venv && uv pip install -e ".[dev]"
 ## Commands
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `transcribe <url>` | Transcribe a single video |
 | `batch <url>` | Batch download all videos in a collection |
 | `queue add <url>` | Add a video to the persistent queue |
@@ -94,6 +94,7 @@ docker compose up -d
 ```
 
 The dashboard provides:
+
 - One-click video transcription
 - Real-time queue monitoring
 - Transcript browsing and download
@@ -115,7 +116,7 @@ docker compose down
 Configuration via environment variables:
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `BILI_SCRIBE_OUTPUT_DIR` | `/app/out` | Transcript output directory |
 | `BILI_SCRIBE_TASKS_DIR` | `/app/tasks` | Task queue persistence directory |
 | `BILI_SCRIBE_PASSWORD` | (none) | HTTP Basic Auth password (set for public exposure) |
@@ -123,7 +124,7 @@ Configuration via environment variables:
 ## Whisper Models
 
 | Model | Size | RAM | Speed | Use Case |
-|-------|------|-----|-------|----------|
+| ------- | ------ | ----- | ------- | ---------- |
 | `tiny` | ~75MB | ~1GB | Fastest | Quick draft |
 | `base` | ~145MB | ~1GB | Fast | **Default** — good balance |
 | `small` | ~488MB | ~2GB | Medium | Better accuracy |

@@ -15,7 +15,7 @@ bili-scribe/
 ```
 
 | 层级 | 说明 |
-|------|------|
+| ------ | ------ |
 | `src/core/` | faster-whisper 为核心的转录引擎，B 站 API 封装，三级降级策略 |
 | `src/cli/` | 统一 CLI 入口 `bili-scribe`，多子命令结构 |
 | `scripts/` | 本地辅助脚本，被 `.gitignore` 忽略 |
