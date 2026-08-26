@@ -176,6 +176,16 @@ def build_parser() -> argparse.ArgumentParser:
     # -- version --------------------------------------------------------------
     sub.add_parser("version", help="显示版本信息")
 
+    # -- init -----------------------------------------------------------------
+    p_init = sub.add_parser("init", help="初始化：下载 Whisper 模型")
+    p_init.add_argument(
+        "-m",
+        "--model",
+        default="base",
+        choices=["tiny", "base", "small", "medium", "large-v3"],
+        help="Whisper 模型（默认: base）",
+    )
+
     # -- transcript-to-srt ----------------------------------------------------
     p_srt = sub.add_parser("transcript-to-srt", help="将转录文稿转换为 SRT 字幕")
     p_srt.add_argument("input", help="转录文稿.txt 路径")
@@ -381,6 +391,22 @@ def cmd_serve(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_init(args: argparse.Namespace) -> None:
+    """处理 init 子命令：下载 Whisper 模型."""
+    from faster_whisper import WhisperModel
+
+    model_name = args.model
+    print(f"[init] 下载 Whisper {model_name} 模型...")
+
+    try:
+        # 调用 WhisperModel 会自动下载模型
+        WhisperModel(model_name)
+        print(f"✓ {model_name} 模型已就绪")
+    except Exception as e:  # noqa: BLE001
+        print(f"❌ 下载失败: {e}")
+        sys.exit(1)
+
+
 def cmd_info(args: argparse.Namespace) -> None:
     """处理 info 子命令."""
     try:
@@ -435,6 +461,7 @@ def main() -> None:
         "queue": cmd_queue,
         "batch": cmd_batch,
         "serve": cmd_serve,
+        "init": cmd_init,
         "info": cmd_info,
         "transcript-to-srt": cmd_transcript_to_srt,
     }

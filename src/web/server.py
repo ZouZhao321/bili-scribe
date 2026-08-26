@@ -19,6 +19,23 @@ from src.web.worker import worker
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _check_whisper_models() -> None:
+    """检查 Whisper 模型是否已下载。"""
+    cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    models_dir = cache_dir / "models--Systran--faster-whisper-base"
+
+    if not models_dir.exists():
+        print(
+            "[server] ⚠️  Whisper 模型未下载，请先运行: bili-scribe init",
+            file=__import__("sys").stderr,
+        )
+    else:
+        print(
+            "[server] Whisper base 模型已就绪",
+            file=__import__("sys").stderr,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """管理应用生命周期。
@@ -35,6 +52,9 @@ async def lifespan(app: FastAPI):
     # 从磁盘恢复任务
     recovered = storage.recover(queue)
     print(f"[server] 从磁盘恢复 {recovered} 个任务", file=__import__("sys").stderr)
+
+    # 检查 Whisper 模型
+    _check_whisper_models()
 
     worker.start()
     yield
