@@ -379,9 +379,27 @@ def cmd_batch(args: argparse.Namespace) -> None:
     print(f"{'=' * 60}")
 
 
+def _check_port(port: int) -> bool:
+    """检查端口是否可用."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return True  # 端口可用
+        except OSError:
+            return False  # 端口被占用
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """处理 serve 子命令."""
     import uvicorn
+
+    # 检测端口占用
+    if not _check_port(args.port):
+        print(f"[serve] ⚠️ 端口 {args.port} 已被占用")
+        print("[serve] 请停止占用进程或使用 --port 指定其他端口")
+        sys.exit(1)
 
     uvicorn.run(
         "src.web.server:app",
