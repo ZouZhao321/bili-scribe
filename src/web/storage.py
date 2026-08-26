@@ -104,6 +104,10 @@ def _deserialize_task(data: dict) -> Task:
                 return None
         return None
 
+    # 将 status 字符串转换为 TaskStatus 枚举
+    status_str = data.get("status", "pending")
+    status = TaskStatus(status_str) if isinstance(status_str, str) else status_str
+
     return Task(
         task_id=data["task_id"],
         url=data["url"],
@@ -114,7 +118,7 @@ def _deserialize_task(data: dict) -> Task:
         output_format=data.get("output_format", "text"),
         cookie=data.get("cookie", ""),
         webhook=data.get("webhook", ""),
-        status=data.get("status", "pending"),
+        status=status,
         progress=progress,
         created_at=_parse_dt(data.get("created_at")) or datetime.utcnow(),
         started_at=_parse_dt(data.get("started_at")),
