@@ -44,6 +44,7 @@ main
 #### 🔧 开发
 
 **做什么**：
+
 - 新增 `JsonLogger` 类，写入 `~/.queue/cron.jsonl`
 - 每行一个 JSON 事件，固定字段：
   - `t` — ISO 格式时间戳（`2026-08-07T15:00:00`）
@@ -52,7 +53,7 @@ main
 - 事件定义：
 
 | 事件 | 字段 | 触发时机 |
-|:----:|------|----------|
+| :----: | ------ | ---------- |
 | `cron_start` | `pid, lock` | cron 进程开始，是否拿到锁 |
 | `cron_skip` | `reason` | 锁被占用 / 已有任务在跑 / 无任务 |
 | `cron_end` | `pid, dur_s` | cron 进程结束 |
@@ -63,6 +64,7 @@ main
 | `task_fail` | `id, error` | 最终失败 |
 
 **不做什么**：
+
 - 不修改现有 `cron.log` 文本日志（保留兼容）
 - 不接入 cron 流程（只建类，不改调用）
 
@@ -100,6 +102,7 @@ print("✅ JsonLogger 验证通过")
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/01_json_logger.py"
 ```
@@ -115,6 +118,7 @@ pi -p "python3 script/verify/01_json_logger.py"
 #### 🔧 开发
 
 **做什么**：
+
 - `cmd_cron()` 函数入口写 `cron_start`
 - 出口写 `cron_end`（含总耗时）
 - 任务开始前写 `task_start`（记录 `mem_before`, `cpu_before`）
@@ -123,6 +127,7 @@ pi -p "python3 script/verify/01_json_logger.py"
 - 失败/重试时写 `task_retry` / `task_fail`
 
 **不做什么**：
+
 - 不改 `runner.py` 的转录逻辑
 - 不改 `TaskStore` 的存储结构
 
@@ -160,6 +165,7 @@ print("✅ cron 结构化日志验证通过")
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/02_cron_json_logger.py"
 ```
@@ -186,6 +192,7 @@ print(f'✅ 阶段一验证通过: {[e[\"e\"] for e in events]}')
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "bash script/verify/03_phase1_complete.sh"
 ```
@@ -203,6 +210,7 @@ pi -p "bash script/verify/03_phase1_complete.sh"
 #### 🔧 开发
 
 **做什么**：
+
 - `whisper_transcribe()` 返回的每段增加 `avg_logprob`、`no_speech_prob`
 - 新增 `format_transcript()` 函数，输出新格式：
 
@@ -218,6 +226,7 @@ pi -p "bash script/verify/03_phase1_complete.sh"
   - 时间戳：SRT 毫秒级精度 `HH:MM:SS,mmm`
 
 **不做什么**：
+
 - 不修改模型加载逻辑
 - 不修改 `runner.py` 的写入逻辑
 - 不做说话人区分（后续独立阶段）
@@ -255,6 +264,7 @@ print("✅ 转录文稿格式验证通过")
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/04_transcript_format.py"
 ```
@@ -270,6 +280,7 @@ pi -p "python3 script/verify/04_transcript_format.py"
 #### 🔧 开发
 
 **做什么**：
+
 - 写入 `转录文稿.txt`：使用 `format_transcript()` 新格式
 - 写入 `视频信息.txt`：替换原来的 `视频链接.txt`
 
@@ -300,7 +311,7 @@ UP主UID: 12345678
 - 字段来源：
 
 | 字段 | API 来源 |
-|------|----------|
+| ------ | ---------- |
 | BV号 | `bvid` |
 | AV号 | `aid` |
 | 标题 | `title` |
@@ -315,6 +326,7 @@ UP主UID: 12345678
 - 不再写入 `字幕.srt`
 
 **不做什么**：
+
 - 不修改已有 `out/` 目录的旧文件（迁移阶段再做）
 - 不修改队列调度逻辑
 
@@ -354,6 +366,7 @@ print("✅ runner 输出格式验证通过")
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/05_runner_output.py"
 ```
@@ -369,6 +382,7 @@ pi -p "python3 script/verify/05_runner_output.py"
 #### 🔧 开发
 
 **做什么**：
+
 - 新增子命令 `bili-scribe transcript-to-srt <输入路径> [输出路径]`
 - 从 `转录文稿.txt` 行首时间戳提取 start/end
 - 生成标准 SRT 格式：
@@ -386,6 +400,7 @@ pi -p "python3 script/verify/05_runner_output.py"
 - 未指定输出路径时，默认与输入同目录，后缀 `.srt`
 
 **不做什么**：
+
 - 不修改 `转录文稿.txt`
 - 不批量处理（只处理单个文件）
 
@@ -433,6 +448,7 @@ print("✅ transcript-to-srt 验证通过")
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/06_transcript_to_srt.py"
 ```
@@ -450,6 +466,7 @@ pi -p "python3 script/verify/06_transcript_to_srt.py"
 #### 🔧 开发
 
 **做什么**：
+
 - 扫描 `out/` 下所有目录
 - 删除旧格式文件：`书面文稿.txt`、`字幕.srt`、`适配分析.md`
 - 改名：`视频链接.txt` → `视频信息.txt`（保留已有内容）
@@ -466,6 +483,7 @@ pi -p "python3 script/verify/06_transcript_to_srt.py"
 - 支持 `--dry-run` 参数预览操作
 
 **不做什么**：
+
 - 不删除 `audio.m4s`
 - 不重新转录（只清理和入队）
 - 不修改旧 `转录文稿.txt`（新转录会覆盖）
@@ -495,6 +513,7 @@ print("✅ 迁移脚本 dry-run 验证通过")
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/07_migrate_dry_run.py"
 ```
@@ -504,6 +523,7 @@ pi -p "python3 script/verify/07_migrate_dry_run.py"
 ### 📝 执行迁移
 
 **运行方式**（由用户确认后手动执行）：
+
 ```bash
 python3 script/migrate_to_new_format.py
 ```
@@ -551,6 +571,7 @@ print("✅ 迁移验证通过")
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/08_migrate_result.py"
 ```
@@ -568,10 +589,12 @@ pi -p "python3 script/verify/08_migrate_result.py"
 #### 🔧 开发
 
 **做什么**：
+
 - `bili_queue.py` 中默认模型 `small` → `tiny`
 - `MODEL_MEMORY_REQUIREMENTS` 中 `tiny` 阈值已为 500MB，无需修改
 
 **不做什么**：
+
 - 不修改已有任务（已入队任务保留原模型）
 
 ---
@@ -596,6 +619,7 @@ print(result.stdout)
 ```
 
 **运行方式**：
+
 ```bash
 pi -p "python3 script/verify/09_queue_ready.py"
 ```
@@ -605,6 +629,7 @@ pi -p "python3 script/verify/09_queue_ready.py"
 ### 📝 等待 cron 自动调度
 
 **做什么**：
+
 - cron 每 10 分钟自动检查、取任务、转录
 - 每个任务完成后检查：
   - 内存稳定在 ~500MB
@@ -612,9 +637,11 @@ pi -p "python3 script/verify/09_queue_ready.py"
   - `cron.jsonl` 有完整事件记录
 
 **不做什么**：
+
 - 不做说话人区分（后续独立阶段）
 
 **验收**（1 小时后手动检查）：
+
 ```bash
 bili-scribe queue list done | wc -l              # 期望: > 0
 head -5 out/BVxxx_标题/转录文稿.txt                # 期望: 新格式

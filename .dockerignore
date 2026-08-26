@@ -1,41 +1,20 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-
-# 转录输出（构建时不需要）
+.git
+.venv
 out/
-
-# 任务持久化（构建时不需要）
 tasks/
-
-# IDE
-.vscode/
-.idea/
-
-# Git
-.git/
-.gitignore
-
-# 文档
+__pycache__
+*.pyc
+*.pyo
+tests/
 docs/
 notes/
-
-# 测试
-tests/
-
-# 环境变量
-.env
-
-# Pi 配置
 .pi/
-
-# 脚本
-script/
-temp/
-
-# 其他
+.agents/
+.worktree/
 *.md
-.DS_Store
+!README.md
+.env
+.env.*
+docker-compose*.yml
+Dockerfile
+.dockerignore
