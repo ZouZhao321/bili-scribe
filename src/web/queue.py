@@ -47,6 +47,37 @@ class Task:
     usage: dict | None = None
     error: str | None = None
 
+    def __post_init__(self):
+        """验证并转换枚举字段，确保始终为枚举实例。
+
+        从磁盘恢复任务时，反序列化的字符串值会被自动转换为对应的枚举实例。
+        """
+        # 转换 status 字段
+        if isinstance(self.status, str):
+            self.status = TaskStatus(self.status)
+
+        # 转换 mode 字段
+        if isinstance(self.mode, str):
+            self.mode = TranscriptMode(self.mode)
+
+        # 转换 model 字段
+        if isinstance(self.model, str):
+            self.model = WhisperModel(self.model)
+
+        # 转换 output_format 字段
+        if isinstance(self.output_format, str):
+            self.output_format = OutputFormat(self.output_format)
+
+        # 转换 progress.phase 字段
+        if isinstance(self.progress.phase, str):
+            self.progress = ProgressInfo(
+                phase=ProgressPhase(self.progress.phase),
+                percent=self.progress.percent,
+                message=self.progress.message,
+                bytes_downloaded=self.progress.bytes_downloaded,
+                bytes_total=self.progress.bytes_total,
+            )
+
     def elapsed_seconds(self) -> float:
         """计算自任务创建以来经过的时间。
 
