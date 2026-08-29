@@ -172,3 +172,33 @@ class TestTaskStorage:
         storage.save(Task(task_id="test", url="BV1xxx", mode=TranscriptMode.auto, model=WhisperModel.small))
         assert os.path.exists(nested_dir)
         assert os.path.exists(os.path.join(nested_dir, "test.json"))
+
+    def test_deserialize_task_status_is_enum(self, temp_storage_dir):
+        """Test that deserialized task status is a TaskStatus enum instance."""
+        # This test should FAIL before the fix and PASS after
+        storage = TaskStorage(temp_storage_dir)
+        
+        # Create and save a task with failed status
+        task = Task(
+            task_id="enum_test",
+            url="BV1xxx",
+            mode=TranscriptMode.auto,
+            model=WhisperModel.small,
+            status=TaskStatus.failed
+        )
+        storage.save(task)
+        
+        # Load the task back from disk
+        loaded_task = storage.load("enum_test")
+        assert loaded_task is not None
+        
+        # This is the key assertion - status should be an enum instance
+        # Before fix: loaded_task.status will be string "failed", not TaskStatus.failed
+        # After fix: loaded_task.status will be TaskStatus.failed
+        assert isinstance(loaded_task.status, TaskStatus), \
+            f"Task status should be TaskStatus enum, got {type(loaded_task.status)}"
+        
+        # This should NOT raise AttributeError
+        # Before fix: AttributeError: 'str' object has no attribute 'value'
+        status_value = loaded_task.status.value
+        assert status_value == "failed"
