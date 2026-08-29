@@ -172,6 +172,9 @@ class TaskQueue:
     def complete(self, task_id: str, result: dict, usage: dict) -> bool:
         """将任务标记为已完成，附带结果和使用数据。
 
+        只有处于 processing 状态的任务才能被标记为已完成。
+        这防止了在未 dequeue 的情况下直接 complete 导致的幽灵任务。
+
         参数：
             task_id: 任务的唯一标识符。
             result: 转录结果字典。
@@ -184,6 +187,10 @@ class TaskQueue:
             task = self._tasks.get(task_id)
             if task is None:
                 return False
+            # 守卫：只有 processing 状态的任务才能被 complete
+            # 防止在未 dequeue 的情况下直接 complete 导致幽灵任务
+            if task.status != TaskStatus.processing:
+                return False
             task.status = TaskStatus.completed
             task.completed_at = datetime.now(timezone.utc)
             task.result = result
@@ -193,6 +200,8 @@ class TaskQueue:
 
     def fail(self, task_id: str, error: str) -> bool:
         """将任务标记为失败，附带错误信息。
+
+        只有处于 processing 状态的任务才能被标记为失败。
 
         参数：
             task_id: 任务的唯一标识符。
@@ -204,6 +213,9 @@ class TaskQueue:
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
+                return False
+            # 守卫：只有 processing 状态的任务才能被 fail
+            if task.status != TaskStatus.processing:
                 return False
             task.status = TaskStatus.failed
             task.completed_at = datetime.now(timezone.utc)
