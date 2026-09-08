@@ -4,8 +4,8 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from src.core.queue_store import JsonLogger
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+from bili_scribe.core.queue_store import JsonLogger
 
 # 读取当前日志行数
 log_path = JsonLogger.path
@@ -18,7 +18,7 @@ else:
 # 触发空 cron（无任务时）
 import subprocess
 result = subprocess.run(
-    [sys.executable, "src/cli/bili_queue.py", "cron"],
+    [sys.executable, "src/bili_scribe/cli/bili_queue.py", "cron"],
     capture_output=True, text=True
 )
 print(f"cron exit: {result.returncode}")

@@ -258,12 +258,14 @@ def get_collection_info(bvid: str) -> dict | None:
     videos = []
     for section in season.get("sections", []):
         for ep in section.get("episodes", []):
-            videos.append({
-                "bvid": ep.get("bvid", ""),
-                "title": ep.get("title", ""),
-                "aid": ep.get("aid", 0),
-                "cid": ep.get("cid", 0),
-            })
+            videos.append(
+                {
+                    "bvid": ep.get("bvid", ""),
+                    "title": ep.get("title", ""),
+                    "aid": ep.get("aid", 0),
+                    "cid": ep.get("cid", 0),
+                }
+            )
 
     return {
         "title": title,

@@ -7,7 +7,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from src.web.models import (
+from bili_scribe.web.models import (
     OutputFormat,
     ProgressInfo,
     ProgressPhase,

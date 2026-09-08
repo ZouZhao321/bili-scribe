@@ -6,14 +6,14 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from src.web.auth import BasicAuthMiddleware
-from src.web.queue import queue
-from src.web.routes.health import router as health_router
-from src.web.routes.tasks import router as tasks_router
-from src.web.routes.transcribe import router as transcribe_router
-from src.web.routes.video import router as video_router
-from src.web.storage import storage
-from src.web.worker import worker
+from bili_scribe.web.auth import BasicAuthMiddleware
+from bili_scribe.web.queue import queue
+from bili_scribe.web.routes.health import router as health_router
+from bili_scribe.web.routes.tasks import router as tasks_router
+from bili_scribe.web.routes.transcribe import router as transcribe_router
+from bili_scribe.web.routes.video import router as video_router
+from bili_scribe.web.storage import storage
+from bili_scribe.web.worker import worker
 
 # 静态文件目录（相对于本文件）
 STATIC_DIR = Path(__file__).parent / "static"

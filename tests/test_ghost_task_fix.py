@@ -7,14 +7,14 @@ import tempfile
 
 import pytest
 
-from src.web.models import (
+from bili_scribe.web.models import (
     OutputFormat,
     TaskStatus,
     TranscriptMode,
     WhisperModel,
 )
-from src.web.queue import Task, TaskQueue
-from src.web.storage import TaskStorage
+from bili_scribe.web.queue import Task, TaskQueue
+from bili_scribe.web.storage import TaskStorage
 
 
 def _make_task(task_id: str = "test_001", url: str = "BV1234567890") -> Task:

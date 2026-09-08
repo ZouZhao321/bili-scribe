@@ -35,13 +35,15 @@ def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = 
 
         result = []
         for seg in segments:
-            result.append({
-                "from": seg.start,
-                "to": seg.end,
-                "content": seg.text.strip(),
-                "avg_logprob": seg.avg_logprob,
-                "no_speech_prob": seg.no_speech_prob,
-            })
+            result.append(
+                {
+                    "from": seg.start,
+                    "to": seg.end,
+                    "content": seg.text.strip(),
+                    "avg_logprob": seg.avg_logprob,
+                    "no_speech_prob": seg.no_speech_prob,
+                }
+            )
         return result
     except Exception as e:  # noqa: BLE001
         print(f"Whisper 错误: {e}", file=__import__("sys").stderr)

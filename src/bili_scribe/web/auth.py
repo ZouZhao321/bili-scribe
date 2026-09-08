@@ -66,8 +66,8 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
 
         try:
             decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-            username, _, password = decoded.partition(":")
+            _username, _, password = decoded.partition(":")
             # 只验证密码，用户名任意
             return secrets.compare_digest(password, self._password)
-        except Exception:
+        except Exception:  # noqa: BLE001  # 认证解析异常一律拒绝
             return False

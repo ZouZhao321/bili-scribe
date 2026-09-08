@@ -5,10 +5,10 @@ set -e
 cd "$(dirname "$0")/../.."
 
 # 添加测试任务
-python3 -m src.cli.main queue add "BV1EZ4y1d7xC" tiny
+python3 -m bili_scribe.cli.main queue add "BV1EZ4y1d7xC" tiny
 
 # 触发 cron
-python3 -m src.cli.main queue cron
+python3 -m bili_scribe.cli.main queue cron
 
 # 验证事件链
 python3 -c "

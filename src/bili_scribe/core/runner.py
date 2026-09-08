@@ -10,7 +10,7 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
-from src.core.bilibili import (
+from bili_scribe.core.bilibili import (
     download_audio,
     download_subtitle_json,
     extract_bvid,
@@ -20,7 +20,7 @@ from src.core.bilibili import (
     get_video_info,
     get_video_url,
 )
-from src.core.transcriber import format_transcript, format_srt, whisper_transcribe
+from bili_scribe.core.transcriber import format_transcript, whisper_transcribe
 
 # ---------------------------------------------------------------------------
 # 路径
@@ -36,7 +36,7 @@ def _write_video_info(video_dir: Path, bvid: str, title: str, info: dict) -> Non
     duration = info.get("duration", 0)
     owner = info.get("owner", {})
     stat = info.get("stat", {})
-    
+
     # 时长格式化
     h, m = divmod(duration, 3600)
     m, s = divmod(m, 60)
@@ -45,17 +45,17 @@ def _write_video_info(video_dir: Path, bvid: str, title: str, info: dict) -> Non
         dur_str += f" ({h}:{m:02d}:{s:02d})"
     else:
         dur_str += f" ({m}:{s:02d})"
-    
+
     # 发布时间
     pubdate = info.get("pubdate", 0)
     pubdate_str = datetime.fromtimestamp(pubdate).strftime("%Y-%m-%d %H:%M:%S") if pubdate else "未知"
-    
+
     # 播放量格式化
     def fmt_num(n: int) -> str:
         if n >= 10000:
-            return f"{n/10000:.1f}万"
+            return f"{n / 10000:.1f}万"
         return str(n)
-    
+
     lines = [
         f"视频链接: https://www.bilibili.com/video/{bvid}/",
         f"BV号: {bvid}",
@@ -112,17 +112,18 @@ def run_transcription(
     # 1. 解析 BV ID
     try:
         bvid = extract_bvid(url)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # URL 解析失败转为任务失败返回，不向上抛
         return {"success": False, "error": f"URL 解析失败: {e}"}
 
     # 2. 获取视频信息
     title = bvid
     duration = 0
+    info: dict = {}
     try:
         info = get_video_info(bvid)
         title = info.get("title", bvid)
         duration = info.get("duration", 0)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110  # 信息获取失败降级为默认标题，视频仍可转录
         pass
 
     # 3. 创建安全文件名（BV号_标题，标题截断 100 字符）
@@ -142,7 +143,7 @@ def run_transcription(
     # 获取 CID
     try:
         cid, _part_title, _total_pages = get_cid(bvid, page)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # 获取 CID 失败转为任务失败返回
         return {"success": False, "error": f"获取 CID 失败: {e}"}
 
     subtitles = []
@@ -165,7 +166,7 @@ def run_transcription(
                             break
                     except urllib.error.URLError:
                         continue
-        except Exception:
+        except Exception:  # noqa: BLE001, S110  # 字幕获取失败静默降级 Whisper
             pass
 
     # 第 3 级：Whisper 降级（mode 不是 subtitle 且字幕为空时，或 mode 为 both/whisper 时）
@@ -186,10 +187,22 @@ def run_transcription(
                     download_audio(video_url, str(video_path), referer)
                     if video_path.exists():
                         import subprocess
-                        subprocess.run(
-                            ["ffmpeg", "-y", "-i", str(video_path),
-                             "-vn", "-acodec", "copy", "-f", "mp4", str(audio_path)],
-                            check=True, capture_output=True,
+
+                        subprocess.run(  # noqa: S603  # 参数来自本地文件路径/可信解析结果
+                            [  # noqa: S607  # 固定可执行名，经 PATH 解析
+                                "ffmpeg",
+                                "-y",
+                                "-i",
+                                str(video_path),
+                                "-vn",
+                                "-acodec",
+                                "copy",
+                                "-f",
+                                "mp4",
+                                str(audio_path),
+                            ],
+                            check=True,
+                            capture_output=True,
                         )
                         video_path.unlink()  # 删除视频文件，保留音频
             if audio_path.exists():
@@ -201,7 +214,7 @@ def run_transcription(
                     else:
                         subtitles = result
                     source = "whisper"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # Whisper 转录失败转为任务失败返回
             return {"success": False, "error": f"Whisper 转录失败: {e}"}
 
     if not subtitles:
@@ -212,7 +225,7 @@ def run_transcription(
     for s in subtitles:
         if "avg_logprob" not in s:
             s["avg_logprob"] = -0.01  # exp(-0.01) ≈ 0.99
-    
+
     transcript_text = format_transcript(subtitles, model=model)
     transcript_path = video_dir / "转录文稿.txt"
     transcript_path.write_text(transcript_text, encoding="utf-8")
@@ -234,5 +247,3 @@ def run_transcription(
         "lines": len(subtitles),
         "avg_prob": round(math.exp(avg_conf), 2) if avg_conf else 0,
     }
-
-

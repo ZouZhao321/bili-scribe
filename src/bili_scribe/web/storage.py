@@ -8,7 +8,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from src.web.models import (
+from bili_scribe.web.models import (
     OutputFormat,
     ProgressInfo,
     ProgressPhase,
@@ -16,7 +16,7 @@ from src.web.models import (
     TranscriptMode,
     WhisperModel,
 )
-from src.web.queue import Task, TaskQueue
+from bili_scribe.web.queue import Task, TaskQueue
 
 # 默认存储目录
 DEFAULT_STORAGE_DIR = os.path.expanduser("~/.bilibili-api/tasks")

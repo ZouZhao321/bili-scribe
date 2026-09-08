@@ -124,8 +124,8 @@ bili-scribe serve            # 启动服务
 curl localhost:8000/api/v1/health  # → {"status":"ok"}
 ```
 
-> **注意**：远程 main 缺少 `[build-system]` 配置，editable install 可能失败。
-> 如果报 `No module named 'src'`，先修复 pyproject.toml（见阶段 4.1）。
+> **注意**：远程 main 曾缺少 `[build-system]` 配置导致 editable install 失败 —— 已由 #29（src-layout 重构）解决，无需再执行阶段 4.1。
+> 若在旧提交上操作报 `No module named 'src'`，需先修复 pyproject.toml（见下方 4.1，历史指引）。
 
 ### 阶段 4.1：修复远程 main 的 bug（如需要）
 
@@ -133,8 +133,8 @@ curl localhost:8000/api/v1/health  # → {"status":"ok"}
 
 ```bash
 # 修复 pyproject.toml：添加 build-system
-# 修复 src/web/routes/health.py：os.statvfs → shutil.disk_usage
-# 修复 src/core/queue_store.py：get_available_memory_mb 加 Windows 兼容（可选，Linux 不需要）
+# 修复 src/bili_scribe/web/routes/health.py：os.statvfs → shutil.disk_usage
+# 修复 src/bili_scribe/core/queue_store.py：get_available_memory_mb 加 Windows 兼容（可选，Linux 不需要）
 
 git add -A && git commit -m "fix: 修复构建配置和跨平台兼容性"
 git push origin main
