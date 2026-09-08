@@ -12,8 +12,12 @@ import time
 
 from bili_scribe.core.bilibili import download_audio, get_audio_url, get_cid
 
-# 仓库根目录 out/（脚本位于 src/bili_scribe/core/，上溯三级到仓库根）
-OUT_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "out"))
+# 仓库根目录 out/（脚本位于 src/bili_scribe/core/，上溯三级到仓库根）；
+# 部署/安装场景可用 BILI_SCRIBE_OUTPUT_DIR 显式覆盖
+OUT_DIR = os.environ.get(
+    "BILI_SCRIBE_OUTPUT_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "out")),
+)
 
 
 def main():

@@ -6,6 +6,7 @@
 """
 
 import math
+import sys
 import urllib.error
 from datetime import datetime
 from pathlib import Path
@@ -25,7 +26,8 @@ from bili_scribe.core.transcriber import format_transcript, whisper_transcribe
 # ---------------------------------------------------------------------------
 # 路径
 # ---------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+# 仓库根（src/bili_scribe/core/runner.py → parents[0..3] = core/bili_scribe/src/仓库根）
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = PROJECT_ROOT / "out"
 
 TIMEOUT = 6 * 3600  # 6 小时
@@ -123,7 +125,8 @@ def run_transcription(
         info = get_video_info(bvid)
         title = info.get("title", bvid)
         duration = info.get("duration", 0)
-    except Exception:  # noqa: BLE001, S110  # 信息获取失败降级为默认标题，视频仍可转录
+    except Exception as e:  # noqa: BLE001  # 信息获取失败降级为默认标题，视频仍可转录
+        print(f"[runner] 获取视频信息失败，降级使用默认标题: {e}", file=sys.stderr)
         pass
 
     # 3. 创建安全文件名（BV号_标题，标题截断 100 字符）
