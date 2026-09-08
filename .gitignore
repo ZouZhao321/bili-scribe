@@ -1,30 +1,61 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.venv/
-*.egg-info/
-dist/
-build/
+# ══════════ 项目专属 ══════════
 
-# uv
-uv.lock
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-
-# Output
-out/_read_out.py
+# 转录输出（每视频一个子目录 {BV号}_{标题}/）
 out/
 library/
 
-# Git worktree
+# 并行开发 worktree 与本地状态
 .worktree/
 .backups/
+.history/
+
+# 环境变量（生产环境通过环境变量注入，不落盘）
 .env
 .env.*.worktree/
+
+# ══════════ Python ══════════
+
+# 字节码缓存
+__pycache__/
+*.py[cod]
+
+# 虚拟环境
+.venv/
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+.eggs/
+*.egg
+
+# uv 锁文件（当前未提交，保持忽略）
+uv.lock
+
+# 测试与覆盖率
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# 代码检查缓存
+.ruff_cache/
+.mypy_cache/
+.cache/
+
+# 日志
+*.log
+
+# ══════════ 操作系统 ══════════
+
+.DS_Store
+Thumbs.db
+
+# ══════════ IDE ══════════
+
+.vscode/
+.idea/
+
+# PyPI 发布凭据
+.pypirc
