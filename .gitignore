@@ -9,6 +9,9 @@ library/
 .backups/
 .history/
 
+# Pi Agent 运行时任务产物（会话输出/日志），其余 .pi 内容（memory 等）照常跟踪
+.pi/tasks/
+
 # 环境变量（生产环境通过环境变量注入，不落盘）
 .env
 .env.*.worktree/
