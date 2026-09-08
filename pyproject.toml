@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "bili-scribe"
 version = "1.0.0"
@@ -6,10 +10,25 @@ requires-python = ">=3.10"
 dependencies = ["faster-whisper>=1.0.0", "fastapi>=0.141.0", "uvicorn>=0.52.0"]
 
 [project.scripts]
-bili-scribe = "src.cli.main:main"
+bili-scribe = "bili_scribe.cli.main:main"
 
 [tool.uv]
 package = true
+
+[tool.setuptools]
+packages = [
+  "bili_scribe",
+  "bili_scribe.cli",
+  "bili_scribe.core",
+  "bili_scribe.web",
+  "bili_scribe.web.routes",
+]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.package-data]
+"bili_scribe.web" = ["static/*"]
 
 [tool.ruff]
 # 目标 Python 版本
@@ -46,6 +65,7 @@ ignore = [
   "S101",   # assert 在测试中允许
   "BLE001", # 测试中允许盲捕获
   "S110",   # try-except-pass 在测试中允许
+  "N802",   # 中文测试函数名（项目风格）
 ]
 
 [tool.ruff.format]
@@ -55,7 +75,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.ruff.lint.isort]
-known-first-party = ["src", "tests"]
+known-first-party = ["bili_scribe", "tests"]
 
 [dependency-groups]
 dev = ["pytest>=9.0", "httpx>=0.28", "ruff>=0.16.0"]

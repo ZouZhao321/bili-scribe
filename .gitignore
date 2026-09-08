@@ -32,8 +32,8 @@ build/
 .eggs/
 *.egg
 
-# uv 锁文件（当前未提交，保持忽略）
-uv.lock
+
+# 注意: uv.lock 应入库（Dockerfile uv sync --frozen 依赖），勿再忽略
 
 # 测试与覆盖率
 .pytest_cache/

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 # 创建一个测试用的转录文稿.txt
 test_dir = Path("/tmp/test_srt")
@@ -23,7 +23,7 @@ with open(test_input, "w") as f:
 
 # 运行命令
 result = subprocess.run(
-    [sys.executable, "-m", "src.cli.main", "transcript-to-srt", str(test_input)],
+    [sys.executable, "-m", "bili_scribe.cli.main", "transcript-to-srt", str(test_input)],
     capture_output=True, text=True,
 )
 assert result.returncode == 0, f"命令失败: {result.stderr}"

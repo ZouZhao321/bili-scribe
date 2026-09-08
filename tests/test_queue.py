@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from src.web.models import ProgressPhase, TaskStatus, TranscriptMode, WhisperModel
-from src.web.queue import Task, TaskQueue
+from bili_scribe.web.models import ProgressPhase, TaskStatus, TranscriptMode, WhisperModel
+from bili_scribe.web.queue import Task, TaskQueue
 
 
 class TestTask:
@@ -189,8 +189,13 @@ class TestTaskQueue:
 
     def test_list_with_tasks(self, fresh_queue):
         """List with tasks."""
+        from datetime import datetime, timezone
+
         t1 = Task(task_id="t1", url="BV1aaa", mode=TranscriptMode.auto, model=WhisperModel.small)
         t2 = Task(task_id="t2", url="BV1bbb", mode=TranscriptMode.auto, model=WhisperModel.small)
+        # Windows 时钟粒度 ~15ms 会使 now() 碰撞，注入确定性 created_at
+        t1.created_at = datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+        t2.created_at = datetime(2026, 1, 1, 0, 0, 2, tzinfo=timezone.utc)
         fresh_queue.enqueue(t1)
         fresh_queue.enqueue(t2)
 
@@ -221,8 +226,12 @@ class TestTaskQueue:
 
     def test_list_pagination(self, fresh_queue):
         """List pagination."""
+        from datetime import datetime, timedelta, timezone
+
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
         for i in range(5):
             t = Task(task_id=f"t{i}", url=f"BV1{i:03d}", mode=TranscriptMode.auto, model=WhisperModel.small)
+            t.created_at = base + timedelta(seconds=i)  # 确定性递增，避免 Windows 时钟碰撞
             fresh_queue.enqueue(t)
 
         # First page with limit 2
@@ -242,8 +251,13 @@ class TestTaskQueue:
 
     def test_detect_stale_tasks(self, fresh_queue, sample_task):
         """Detect stale tasks."""
+        from datetime import datetime, timedelta, timezone
+
         fresh_queue.enqueue(sample_task)
-        fresh_queue.dequeue()  # marks as processing with started_at
+        task = fresh_queue.dequeue()  # marks as processing with started_at
+        # Windows 时钟粒度 ~15ms 会使 now() 碰撞，注入已过期时间确保 timeout=0 必判定 stale
+        assert task is not None
+        task.started_at = datetime.now(timezone.utc) - timedelta(seconds=1)
 
         # Detects stale with 0 timeout
         stale = fresh_queue.detect_stale_tasks(timeout=0)

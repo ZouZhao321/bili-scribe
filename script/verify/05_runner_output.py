@@ -4,8 +4,8 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from src.core.runner import run_transcription
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+from bili_scribe.core.runner import run_transcription
 
 # 转录一个短视频（有 CC/AI 字幕的）
 result = run_transcription("BV1EZ4y1d7xC", "tiny")

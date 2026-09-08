@@ -4,11 +4,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 # 检查 queue status
 result = subprocess.run(
-    [sys.executable, "-m", "src.cli.main", "queue", "status"],
+    [sys.executable, "-m", "bili_scribe.cli.main", "queue", "status"],
     capture_output=True, text=True,
 )
 print(result.stdout)

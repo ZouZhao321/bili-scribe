@@ -4,8 +4,8 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from src.core.queue_store import JsonLogger
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+from bili_scribe.core.queue_store import JsonLogger
 
 # 1. 写入 3 条事件
 log = JsonLogger()

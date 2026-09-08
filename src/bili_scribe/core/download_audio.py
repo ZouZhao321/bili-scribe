@@ -8,18 +8,16 @@
 
 import os
 import re
-import sys
 import time
 
-# 确保项目根目录在 sys.path 中，以便找到 core/
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
+from bili_scribe.core.bilibili import download_audio, get_audio_url, get_cid
 
-from src.core.bilibili import download_audio, get_audio_url, get_cid  # noqa: E402
-
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "out")
-OUT_DIR = os.path.abspath(OUT_DIR)
+# 仓库根目录 out/（脚本位于 src/bili_scribe/core/，上溯三级到仓库根）；
+# 部署/安装场景可用 BILI_SCRIBE_OUTPUT_DIR 显式覆盖
+OUT_DIR = os.environ.get(
+    "BILI_SCRIBE_OUTPUT_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "out")),
+)
 
 
 def main():
@@ -30,7 +28,11 @@ def main():
     请求之间包含 1 秒的速率限制延迟。
     """
     # 获取所有目录
-    dirs = sorted([d for d in os.listdir(OUT_DIR) if os.path.isdir(os.path.join(OUT_DIR, d))])
+    try:
+        dirs = sorted([d for d in os.listdir(OUT_DIR) if os.path.isdir(os.path.join(OUT_DIR, d))])
+    except FileNotFoundError:
+        print(f"✗ 输出目录不存在: {OUT_DIR}")
+        return
 
     total = len(dirs)
     success = 0

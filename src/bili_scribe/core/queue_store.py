@@ -7,6 +7,7 @@
 import json
 import logging
 import time
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
@@ -207,10 +208,9 @@ class FileLock:
         return False
 
     def release(self):
-        try:
+        # 目录可能已被清理/占用，静默忽略即可
+        with suppress(OSError):
             self.path.rmdir()
-        except OSError:
-            pass
 
     def __enter__(self):
         if not self.acquire():

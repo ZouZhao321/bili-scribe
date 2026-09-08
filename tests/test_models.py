@@ -7,7 +7,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from src.web.models import (
+from bili_scribe.web.models import (
     AudioInfo,
     ErrorResponse,
     HealthResponse,
@@ -294,7 +294,7 @@ class TestVideoInfoResponse:
 
     def test_with_pages(self):
         """With pages."""
-        from src.web.models import PageInfo
+        from bili_scribe.web.models import PageInfo
 
         info = VideoInfoResponse(
             bvid="BV1xxx",
@@ -336,7 +336,7 @@ class TestTaskListResponse:
 
     def test_with_tasks(self):
         """With tasks."""
-        from src.web.models import TaskSummary
+        from bili_scribe.web.models import TaskSummary
 
         task = TaskSummary(
             task_id="test_001",

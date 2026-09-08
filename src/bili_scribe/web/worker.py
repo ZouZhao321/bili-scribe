@@ -10,23 +10,24 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-# 导入核心转录逻辑
-from src.core.runner import run_transcription
-from src.core.queue_store import (
+from bili_scribe.core.queue_store import (
     CPU_THRESHOLD,
     MEMORY_THRESHOLD,
     MODEL_MEMORY_REQUIREMENTS,
     get_available_memory_mb,
     get_cpu_usage,
 )
-from src.web.models import (
+
+# 导入核心转录逻辑
+from bili_scribe.core.runner import run_transcription
+from bili_scribe.web.models import (
     OutputFormat,
     ProgressPhase,
     TaskStatus,
     TranscriptSource,
 )
-from src.web.queue import queue
-from src.web.storage import storage
+from bili_scribe.web.queue import queue
+from bili_scribe.web.storage import storage
 
 # 轮询间隔（秒）：无任务或资源不足时等待时间
 POLL_INTERVAL = 30.0
@@ -315,7 +316,7 @@ class Worker:
 
                 # 资源检查：CPU 和内存
                 pending = pending_tasks[0]
-                model = pending.model.value if hasattr(pending.model, 'value') else str(pending.model)
+                model = pending.model.value if hasattr(pending.model, "value") else str(pending.model)
                 ok, reason = self._check_resources(model)
                 if not ok:
                     print(f"[worker] 资源不足，跳过: {reason}", file=sys.stderr)

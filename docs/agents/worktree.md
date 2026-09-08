@@ -150,5 +150,5 @@ cd /root/bilibili-transcript/.worktree/feat-agents-docs
 git worktree add .worktree/main main
 
 # 随时对比
-diff -r .worktree/main/src/core/ src/core/
+diff -r .worktree/main/src/bili_scribe/core/ src/bili_scribe/core/
 ```

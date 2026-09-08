@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from src.web.models import (
+from bili_scribe.web.models import (
     ProgressPhase,
     TaskListResponse,
     TaskProgress,
@@ -12,8 +12,8 @@ from src.web.models import (
     TaskSummary,
     WhisperModel,
 )
-from src.web.queue import queue
-from src.web.storage import storage
+from bili_scribe.web.queue import queue
+from bili_scribe.web.storage import storage
 
 router = APIRouter(tags=["tasks"])
 

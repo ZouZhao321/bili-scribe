@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.web.queue import queue
-from src.web.storage import storage
+from bili_scribe.web.queue import queue
+from bili_scribe.web.storage import storage
 
 
 class TestHealthEndpoint:
@@ -254,12 +254,10 @@ class TestRootEndpoint:
     """Tests for GET /."""
 
     def test_root_returns_200(self, api_client: TestClient):
-        """Root returns 200."""
+        """Root returns the SPA index page."""
         resp = api_client.get("/")
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "ok"
-        assert data["service"] == "bili-scribe-api"
+        assert "text/html" in resp.headers["content-type"]
 
 
 class TestOpenAPI:

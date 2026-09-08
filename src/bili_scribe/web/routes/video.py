@@ -6,13 +6,13 @@ import urllib.error
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.core.bilibili import (
+from bili_scribe.core.bilibili import (
     extract_bvid,
     get_cid,
     get_subtitle_url,
     get_video_info,
 )
-from src.web.models import PageInfo, VideoInfoResponse
+from bili_scribe.web.models import PageInfo, VideoInfoResponse
 
 router = APIRouter(tags=["video"])
 

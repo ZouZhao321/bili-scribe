@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 result = subprocess.run(
     [sys.executable, "script/migrate_to_new_format.py", "--dry-run"],

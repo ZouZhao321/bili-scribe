@@ -2,28 +2,34 @@
 
 from __future__ import annotations
 
-import os
-import sys
 import tempfile
 from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
 
-# Ensure the project root is on sys.path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 # ── Fixtures ──
 
 
 @pytest.fixture
-def api_client() -> Generator[TestClient, None, None]:
+def api_client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
     """Create a TestClient bound to the FastAPI application.
+
+    隔离任务存储目录并清空队列，避免受 ~/.bilibili-api 真实任务
+    或先前测试残留影响（测试应为 hermetic）。
 
     Yields:
         A TestClient instance for making HTTP requests to the API.
     """
-    from src.web.server import app
+    from bili_scribe.web.queue import queue
+    from bili_scribe.web.server import app
+    from bili_scribe.web.storage import storage
+
+    # 将持久化目录指向隔离的临时目录
+    monkeypatch.setattr(storage, "_dir", str(tmp_path))
+    # 清空内存队列，防止跨测试残留导致限流
+    with queue._lock:
+        queue._tasks.clear()
 
     with TestClient(app) as client:
         yield client
@@ -49,7 +55,7 @@ def fresh_queue():
     Returns:
         A TaskQueue instance with max_size=10.
     """
-    from src.web.queue import TaskQueue
+    from bili_scribe.web.queue import TaskQueue
 
     return TaskQueue(max_size=10)
 
@@ -61,8 +67,8 @@ def sample_task():
     Returns:
         A Task instance with known test values.
     """
-    from src.web.models import OutputFormat, TranscriptMode, WhisperModel
-    from src.web.queue import Task
+    from bili_scribe.web.models import OutputFormat, TranscriptMode, WhisperModel
+    from bili_scribe.web.queue import Task
 
     return Task(
         task_id="test_001",

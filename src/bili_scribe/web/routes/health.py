@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import os
+import shutil
 import time
 import urllib.error
 import urllib.request
 
 from fastapi import APIRouter
 
-from src.web.models import HealthCheckItem, HealthChecks, HealthResponse
-from src.web.queue import queue
-from src.web.worker import worker
+from bili_scribe.web.models import HealthCheckItem, HealthChecks, HealthResponse
+from bili_scribe.web.queue import queue
+from bili_scribe.web.worker import worker
 
 router = APIRouter(tags=["health"])
 
@@ -51,8 +52,9 @@ def _check_disk_space() -> HealthCheckItem:
     try:
         check_path = os.path.expanduser("~/.bilibili-api")
         os.makedirs(check_path, exist_ok=True)
-        stat = os.statvfs(check_path)
-        free_gb = stat.f_bavail * stat.f_frsize / (1024**3)
+        # statvfs 在 Windows 不可用，改用 shutil.disk_usage（跨平台）
+        usage = shutil.disk_usage(check_path)
+        free_gb = usage.free / (1024**3)
         if free_gb < 0.1:
             return HealthCheckItem(status="error", message=f"磁盘空间不足: {free_gb:.1f}GB")
         return HealthCheckItem(status="ok", message=f"磁盘空间充足 ({free_gb:.1f}GB)")

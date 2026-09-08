@@ -4,8 +4,8 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from src.core.transcriber import format_transcript
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+from bili_scribe.core.transcriber import format_transcript
 
 # 模拟 Whisper 返回数据
 mock_segments = [

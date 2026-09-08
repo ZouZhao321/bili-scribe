@@ -22,12 +22,8 @@ import argparse
 import sys
 from pathlib import Path
 
-# 项目根目录
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from src.core.bilibili import extract_bvid, get_collection_info, get_video_info  # noqa: E402
-from src.core.runner import run_transcription  # noqa: E402
+from bili_scribe.core.bilibili import extract_bvid, get_collection_info, get_video_info
+from bili_scribe.core.runner import run_transcription
 
 VERSION = "1.0.0"
 
@@ -275,7 +271,7 @@ def cmd_queue(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     # 导入 bili_queue 模块，将参数转发
-    from src.cli.bili_queue import _deprecated
+    from bili_scribe.cli.bili_queue import _deprecated
 
     _deprecated(args)
 
@@ -284,7 +280,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
     """处理 batch 子命令."""
     import time
 
-    from src.core.bilibili import extract_bvid
+    from bili_scribe.core.bilibili import extract_bvid
 
     # 复用 download_collection.py 中的逻辑
     url = args.url
@@ -374,7 +370,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
     uvicorn.run(
-        "src.web.server:app",
+        "bili_scribe.web.server:app",
         host=args.host,
         port=args.port,
         workers=args.workers,

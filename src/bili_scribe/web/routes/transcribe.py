@@ -9,14 +9,14 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from src.core.bilibili import (
+from bili_scribe.core.bilibili import (
     download_subtitle_json,
     extract_bvid,
     get_cid,
     get_subtitle_url,
     get_video_info,
 )
-from src.web.models import (
+from bili_scribe.web.models import (
     OutputFormat,
     SubtitleEntry,
     TaskProgress,
@@ -31,9 +31,9 @@ from src.web.models import (
     UsageInfo,
     WhisperModel,
 )
-from src.web.queue import Task, queue
-from src.web.storage import storage
-from src.web.worker import worker
+from bili_scribe.web.queue import Task, queue
+from bili_scribe.web.storage import storage
+from bili_scribe.web.worker import worker
 
 router = APIRouter(tags=["transcribe"])
 

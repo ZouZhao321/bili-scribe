@@ -6,7 +6,7 @@
 
 ## 架构现状（2026-08 迁移后）
 
-> **以 HTTP API + Worker 为主**。`src/web/` 是当前主架构：FastAPI 服务 + 后台 Worker + SPA 前端。
+> **以 HTTP API + Worker 为主**。`src/bili_scribe/web/` 是当前主架构：FastAPI 服务 + 后台 Worker + SPA 前端。
 > CLI 的 `transcribe` / `batch` 为**同步直跑不入队**；队列调度已迁移到 Worker（30s 轮询 + CPU/内存感知自调度），`queue`、`cron` 命令已废弃/删除。
 
 | 操作 | 入口 |
@@ -72,9 +72,9 @@
 
 | 目录 | 作用 |
 | ------ | ------ |
-| `src/core/` | 核心引擎：B 站 API 交互、Whisper 转录、队列持久化 |
-| `src/cli/` | CLI 命令行入口，`bili-scribe` 多子命令实现 |
-| `src/web/` | 当前主架构：HTTP API 服务 + Worker 调度 + SPA 前端 |
+| `src/bili_scribe/core/` | 核心引擎：B 站 API 交互、Whisper 转录、队列持久化 |
+| `src/bili_scribe/cli/` | CLI 命令行入口，`bili-scribe` 多子命令实现 |
+| `src/bili_scribe/web/` | 当前主架构：HTTP API 服务 + Worker 调度 + SPA 前端 |
 | `tests/` | 测试套件（pytest） |
 | `docs/` | 项目文档入口 |
 | `docs/agents/` | Pi Agent 操作文档：架构、CLI、工作流、调度、输出、内存 |
@@ -90,7 +90,7 @@
 
 ## 工具使用规则
 
-- **bili-scribe 命令**：必须通过项目的 CLI 入口执行（如 `python -m src.cli.main`），系统 PATH 中无此命令
+- **bili-scribe 命令**：必须通过项目的 CLI 入口执行（如 `python -m bili_scribe.cli.main`），系统 PATH 中无此命令
 - **服务运行**：调用 HTTP API 前，先确认 `bili-scribe serve` 在运行
 
 ## 文档索引（必读规则）
