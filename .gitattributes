@@ -1,0 +1,10 @@
+# 换行符规范化
+#
+# Windows 侧 core.autocrlf=true 会把检出文件写成 CRLF，
+# 而 shell 脚本与 Docker 构建文件必须在 Linux/WSL/容器内可直接使用
+# （CRLF 会导致 `/usr/bin/env: 'bash\r'`、`docker build` 命令解析失败）。
+# 这里显式钉死为 LF，跨平台检出结果一致。
+
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+.dockerignore text eol=lf
