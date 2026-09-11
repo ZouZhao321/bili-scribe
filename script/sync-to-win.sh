@@ -159,40 +159,51 @@ else
 	LOGS_OK=0
 fi
 
-# ── 4. 校验：目标侧文件数必须覆盖源侧 ────────────────────────────────────────
+# ── 4. 校验：源侧每个文件都必须在目标落盘且大小一致 ──────────────────────
+# 目标可能已有历史内容（同一天多次回传）或同名文件需被覆盖，
+# 因此不能比“总数”，必须逐文件核对存在性与大小。
+verify_tree() {
+	# verify_tree <源目录> <目标目录> <标签>
+	local src="$1" dst="$2" label="$3"
+	local n=0 bad=0 shown=0 f rel
+	while IFS= read -r -d '' f; do
+		rel="${f:$(( ${#src} + 1 ))}"
+		n=$((n + 1))
+		if [ ! -f "$dst/$rel" ]; then
+			[ "$shown" -lt 3 ] && say "  ✗ 目标缺失: $rel"
+			shown=$((shown + 1))
+			bad=$((bad + 1))
+		elif [ "$(stat -c%s "$f")" != "$(stat -c%s "$dst/$rel")" ]; then
+			[ "$shown" -lt 3 ] && say "  ✗ 大小不一致: $rel"
+			shown=$((shown + 1))
+			bad=$((bad + 1))
+		fi
+	done < <(find "$src" -type f -print0)
+	if [ "$bad" = 0 ]; then
+		say "  ✓ $label: $n 个文件均已落盘且大小一致"
+		return 0
+	fi
+	say "  ✗ $label: $n 个文件中 $bad 个未正确落盘"
+	return 1
+}
+
 if [ "$DRY_RUN" = 0 ]; then
 	say ""
 	say "④ 校验"
 	fail=0
 	if [ "$OUT_OK" = 1 ]; then
-		n_dst=$(count_files "$DEST")
-		# 目标含 _tasks/_logs，产物部分按目录比对：目标数应 ≥ 源产物数
-		if [ "$n_dst" -lt "$n_src" ]; then
-			say "  ✗ 产物文件数不足: 源 $n_src → 目标 $n_dst"
-			fail=1
-		else
-			say "  ✓ 产物: 源 $n_src → 目标 out/$DATE/ 共 $n_dst 个文件"
-		fi
+		verify_tree "$SRC_OUT" "$DEST" "产物" || fail=1
 	fi
 	if [ "$TASKS_OK" = 1 ]; then
-		n_dst_t=$(find "$DEST/_tasks" -maxdepth 1 -name '*.json' | wc -l | tr -d ' ')
-		[ "$n_dst_t" = "$n_tasks" ] || {
-			say "  ✗ 任务记录不一致: $n_tasks → $n_dst_t"
-			fail=1
-		}
+		verify_tree "$SRC_TASKS" "$DEST/_tasks" "任务记录" || fail=1
 	fi
 	if [ "$LOGS_OK" = 1 ]; then
-		n_dst_l=$(find "$DEST/_logs" -maxdepth 1 -name '*.log' | wc -l | tr -d ' ')
-		[ "$n_dst_l" = "$n_logs" ] || {
-			say "  ✗ 日志不一致: $n_logs → $n_dst_l"
-			fail=1
-		}
+		verify_tree "$SRC_LOGS" "$DEST/_logs" "日志" || fail=1
 	fi
 	if [ "$fail" = 1 ]; then
 		echo "✗ 校验失败，**保留 WSL 侧内容不做清理**，请人工核对。" >&2
 		exit 1
 	fi
-	say "  ✓ 任务记录/日志文件数一致"
 
 	# ── 5. 清空 WSL 侧（使下次从零开始） ──────────────────────────────────────
 	if [ "$KEEP" = 1 ]; then
