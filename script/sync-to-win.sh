@@ -167,7 +167,7 @@ verify_tree() {
 	local src="$1" dst="$2" label="$3"
 	local n=0 bad=0 shown=0 f rel
 	while IFS= read -r -d '' f; do
-		rel="${f:$(( ${#src} + 1 ))}"
+		rel="${f:$((${#src} + 1))}"
 		n=$((n + 1))
 		if [ ! -f "$dst/$rel" ]; then
 			[ "$shown" -lt 3 ] && say "  ✗ 目标缺失: $rel"
