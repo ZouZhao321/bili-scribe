@@ -66,6 +66,25 @@
 2. 在 worktree 中初始化环境
 3. 后续在该 worktree 中开发，与原工作区完全隔离（各自拥有独立的依赖、`out/`、未提交修改）
 
+### 转录运行与产物回传（WSL → Windows）
+
+> **执行环境是 WSL**（仓库位于 `~/dev/bili-scribe`），Windows 侧只做归档与查看。
+
+1. 在 WSL 仓库根执行转录，日志统一写入 `logs/`：
+
+   ```bash
+   cd ~/dev/bili-scribe && mkdir -p logs
+   .venv/bin/python -m bili_scribe.cli.main transcribe "<url>" --model base \
+     >> "logs/transcribe-$(date +%F).log" 2>&1
+   ```
+
+   启动服务同理：`.venv/bin/python -m bili_scribe.cli.main serve >> logs/serve-$(date +%F).log 2>&1 &`
+
+2. 跑完回传：`bash script/sync-to-win.sh`（可用 `--dry-run` 预览、`--keep` 保留 WSL 侧）
+3. 归档落到 Windows 侧 `out/<日期>/`：转录产物目录 + `_tasks/`（任务记录 JSON）+ `_logs/`（运行日志）
+4. **回传成功后脚本会清空 WSL 侧的 `out/`、任务记录与 `logs/`** —— WSL 每批从零开始；文件数校验不通过则中止且不清空
+5. WSL 非交互 shell 无 `~/.local/bin`（uv 所在），后台跑服务需先 `export PATH="$HOME/.local/bin:$PATH"`
+
 ## 项目目录结构
 
 > 仅记录目录，文件易变不在此列。
@@ -81,8 +100,9 @@
 | `docs/adr/` | 架构决策记录（ADR） |
 | `docs/experiments/` | Whisper 实验记录，每个实验独立子目录 |
 | `docs/plan/` | 规划文档 |
-| `script/` | 辅助脚本：推送中转、输出迁移、作者映射 |
-| `out/` | 转录结果输出，每个视频一个子目录 `{BV号}_{标题}/` |
+| `script/` | 辅助脚本：产物回传（`sync-to-win.sh`）、推送中转、输出迁移、作者映射 |
+| `out/` | 转录结果归档（Windows 侧）：按批次 `out/<日期>/` 组织，内含产物目录、`_tasks/`、`_logs/` |
+| `logs/` | WSL 侧运行日志（serve / 转录），回传后清空，已被 gitignore |
 | `notes/` | 卡片盒子笔记，按日期命名 |
 | `.pi/` | Pi 代理配置：settings.json、扩展、npm 包、会话记忆 |
 | `.agents/` | Pi Agent skills 技能定义 |
@@ -92,6 +112,7 @@
 
 - **bili-scribe 命令**：必须通过项目的 CLI 入口执行（如 `python -m bili_scribe.cli.main`），系统 PATH 中无此命令
 - **服务运行**：调用 HTTP API 前，先确认 `bili-scribe serve` 在运行
+- **WSL 运行约定**：转录与 serve 在 WSL 执行，产物/记录/日志跑完即回传 Windows 侧 `out/<日期>/`，WSL 侧不长期留存
 
 ## 文档索引（必读规则）
 
