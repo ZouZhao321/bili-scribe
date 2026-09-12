@@ -102,7 +102,7 @@
 | `docs/plan/` | 规划文档 |
 | `script/` | 辅助脚本：产物回传（`sync-to-win.sh`）、推送中转、输出迁移、作者映射 |
 | `out/` | 转录结果归档（Windows 侧）：按批次 `out/<日期>/` 组织，内含产物目录、`_tasks/`、`_logs/` |
-| `logs/` | WSL 侧运行日志（serve / 转录），回传后清空，已被 gitignore |
+| `logs/` | WSL 侧运行日志（serve / 转录），回传后清空；`.gitignore` 以 `*.log` 规则忽略其中日志（目录本身无独立规则，非 `.log` 文件仍会被跟踪） |
 | `notes/` | 卡片盒子笔记，按日期命名 |
 | `.pi/` | Pi 代理配置：settings.json、扩展、npm 包、会话记忆 |
 | `.agents/` | Pi Agent skills 技能定义 |

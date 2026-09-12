@@ -1,8 +1,8 @@
 #!/bin/bash
 # 通过远程服务器中转操作 GitHub
 # 用法:
-#   ./scripts/push.sh push <branch>           # 推送分支到 GitHub
-#   ./scripts/push.sh pr-update <pr> <file>   # 从文件读取内容更新 PR 描述
+#   ./script/push.sh push <branch>           # 推送分支到 GitHub
+#   ./script/push.sh pr-update <pr> <file>   # 从文件读取内容更新 PR 描述
 
 set -e
 
