@@ -13,6 +13,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from fastapi.testclient import TestClient
+
+from bili_scribe.web.models import TaskStatus
+
 # ── 测试替身 ────────────────────────────────────────────────────────────────
 
 
@@ -27,7 +32,6 @@ class _FakeWhisperModel:
     """记录 transcribe() 收到的关键字参数，不做任何真实推理。"""
 
     last_kwargs: dict | None = None
-    last_audio_path: str | None = None
 
     def __init__(self, model_size: str, device: str = "cpu", compute_type: str = "int8"):
         self.model_size = model_size
@@ -35,7 +39,6 @@ class _FakeWhisperModel:
     def transcribe(self, audio_path: str, **kwargs):
         """记录调用参数并返回空片段列表。"""
         _FakeWhisperModel.last_kwargs = kwargs
-        _FakeWhisperModel.last_audio_path = audio_path
         return [], _FakeInfo()
 
 
@@ -158,15 +161,36 @@ class TestRunnerPromptChain:
 # ── 3. HTTP API：请求字段 → 任务 → 持久化 ───────────────────────────────────
 
 
+@pytest.fixture
+def api_client(tmp_path, monkeypatch):
+    """覆盖 conftest 的同名 fixture：在 lifespan 启动 worker **之前**先把它打桩掉。
+
+    在测试体内 monkeypatch worker.start 是空操作：`with TestClient(app)` 在 fixture
+    setup 阶段就执行了 lifespan（storage.recover + worker.start），真实 worker 线程
+    已经起来，会去队列里抢任务并调真实的 run_transcription。
+    同时把持久化目录指向 tmp_path，避免 process_task 里的 _progress() 往真实的
+    ~/.bilibili-api/tasks 写文件（测试必须 hermetic）。
+    """
+    from bili_scribe.web import worker as worker_module
+    from bili_scribe.web.queue import queue
+    from bili_scribe.web.server import app
+    from bili_scribe.web.storage import storage
+
+    monkeypatch.setattr(storage, "_dir", str(tmp_path))
+    monkeypatch.setattr(worker_module.worker, "start", lambda: None)
+    with queue._lock:
+        queue._tasks.clear()
+
+    with TestClient(app) as client:
+        yield client
+
+
 class TestApiPrompt:
     """POST /api/v1/transcribe 的 initial_prompt 字段。"""
 
-    def test_request_prompt_is_stored_on_task(self, api_client, monkeypatch):
+    def test_request_prompt_is_stored_on_task(self, api_client):
         """请求携带 initial_prompt 时，入队的任务必须保留它。"""
-        from bili_scribe.web import worker as worker_module
         from bili_scribe.web.queue import queue
-
-        monkeypatch.setattr(worker_module.worker, "start", lambda: None)
 
         resp = api_client.post(
             "/api/v1/transcribe",
@@ -186,12 +210,9 @@ class TestApiPrompt:
         # 任务详情接口不因新字段而回归
         assert api_client.get(f"/api/v1/transcribe/{task_id}").status_code == 200
 
-    def test_default_request_prompt_is_empty(self, api_client, monkeypatch):
+    def test_default_request_prompt_is_empty(self, api_client):
         """未携带该字段时默认为空串，不改变既有请求的语义。"""
-        from bili_scribe.web import worker as worker_module
         from bili_scribe.web.queue import queue
-
-        monkeypatch.setattr(worker_module.worker, "start", lambda: None)
 
         resp = api_client.post(
             "/api/v1/transcribe",
@@ -201,11 +222,16 @@ class TestApiPrompt:
         assert resp.status_code == 202
         assert queue.peek(resp.json()["task_id"]).initial_prompt == ""
 
-    def test_worker_forwards_prompt_to_runner(self, monkeypatch):
+    def test_worker_forwards_prompt_to_runner(self, monkeypatch, tmp_path):
         """worker 执行任务时把 initial_prompt 交给 run_transcription。"""
         from bili_scribe.web import worker as worker_module
         from bili_scribe.web.models import TranscriptMode, WhisperModel
         from bili_scribe.web.queue import Task, queue
+        from bili_scribe.web.storage import storage
+
+        # process_task 会经 _progress() 落盘，不隔离就会往真实的
+        # ~/.bilibili-api/tasks 写 prompt_chain_001.json
+        monkeypatch.setattr(storage, "_dir", str(tmp_path))
 
         captured: dict = {}
 
@@ -220,6 +246,10 @@ class TestApiPrompt:
                 "source": "whisper",
                 "subtitles": [{"from": 0.0, "to": 1.0, "content": "内容"}],
                 "lines": 1,
+                # process_task 必须读这个键（worker.py 里 api_result["full_text"]
+                # = result["full_text"]）。缺了它会抛 KeyError，被宽 except 吞掉后
+                # 任务实际失败，而只断言 captured 的测试照样绿。
+                "full_text": "内容",
             }
 
         monkeypatch.setattr(worker_module, "run_transcription", fake_run)
@@ -236,7 +266,12 @@ class TestApiPrompt:
             queue._tasks.clear()
         assert queue.enqueue(task) is True
         try:
+            # process_task 假定任务已被 worker 出队（complete/fail 只接受 processing
+            # 状态，queue.py 里的幽灵任务守卫），必须先 dequeue，否则任务到不了终态。
+            assert queue.dequeue() is not None
             worker_module.process_task(task.task_id)
+
+            assert queue.peek(task.task_id).status == TaskStatus.completed, "任务应走到终态 completed"
         finally:
             queue.remove(task.task_id)
 
