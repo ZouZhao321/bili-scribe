@@ -11,6 +11,7 @@ CLI 声明了 -l/--language、-p/--page、-w/--force-whisper、-o/--output、
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from bili_scribe.cli import main
@@ -18,8 +19,21 @@ from bili_scribe.core import runner
 
 
 def _ok_result() -> dict[str, Any]:
-    """cmd_transcribe 输出所需的最小成功结果。"""
-    return {"success": True, "bv": "BV1Fsn4zCEhi", "title": "标题", "srt": "", "lines": 3}
+    """cmd_transcribe 输出所需的最小成功结果。
+
+    键必须与 run_transcription 的真实返回契约一致（见 runner.py 的 return）：
+    文稿路径是 "transcript"，字幕列表是 "subtitles"。
+    此前这里编造过一个 run_transcription 从不返回的 "srt" 键，恰好把
+    cmd_transcribe 里读 result["srt"] 的死参数缺陷遮盖住了。
+    """
+    return {
+        "success": True,
+        "bv": "BV1Fsn4zCEhi",
+        "title": "标题",
+        "transcript": "/repo/out/BV1Fsn4zCEhi_标题_base/转录文稿.txt",
+        "subtitles": [{"from": 0.0, "to": 1.0, "content": "你好"}],
+        "lines": 3,
+    }
 
 
 class _Recorder:
@@ -29,6 +43,9 @@ class _Recorder:
         self.calls: list[dict[str, Any]] = []
 
     def __call__(self, url: str, model: str, **kwargs: Any) -> dict[str, Any]:
+        # 用真实签名做绑定校验：若关键字名漂移（例如 language → lang），
+        # 这里立即 TypeError，而不是「测试绿、生产炸」。
+        inspect.signature(runner.run_transcription).bind(url, model, **kwargs)
         self.calls.append({"url": url, "model": model, **kwargs})
         return _ok_result()
 
@@ -158,3 +175,34 @@ class TestRunTranscriptionOutputDir:
 
         assert result["success"] is False
         assert (tmp_path / "BV1Fsn4zCEhi_标题" / "视频信息.txt").is_file()
+
+
+class TestOutputBranches:
+    """-f/--format 与 -q/--quiet 必须真正产生输出。
+
+    这两个参数与 #32 是同一类缺陷但根因不同：cmd_transcribe 读的是
+    result["srt"]，而 run_transcription 从不返回该键（真实键是 "transcript"）。
+    结果是 -f srt 什么都不打印、-q 只打印空行、默认分支还输出 "SRT 字幕: None"。
+    """
+
+    def _out(self, monkeypatch, capsys, argv):
+        monkeypatch.setattr(main, "run_transcription", _Recorder())
+        main.cmd_transcribe(_parse(argv))
+        return capsys.readouterr().out
+
+    def test_format_srt_必须输出带时间轴的字幕(self, monkeypatch, capsys):
+        out = self._out(monkeypatch, capsys, ["transcribe", "BV1Fsn4zCEhi", "-f", "srt"])
+
+        assert out.strip(), "-f srt 必须有输出（原实现静默无输出）"
+        assert "-->" in out, "SRT 必须含时间轴箭头"
+
+    def test_quiet_只输出文稿路径(self, monkeypatch, capsys):
+        out = self._out(monkeypatch, capsys, ["transcribe", "BV1Fsn4zCEhi", "-q"])
+
+        assert out.strip() == _ok_result()["transcript"], "-q 应输出产物路径供管道消费"
+
+    def test_默认文本输出不含_None(self, monkeypatch, capsys):
+        out = self._out(monkeypatch, capsys, ["transcribe", "BV1Fsn4zCEhi"])
+
+        assert "None" not in out, "不应再打印不存在的 srt 键"
+        assert _ok_result()["transcript"] in out
