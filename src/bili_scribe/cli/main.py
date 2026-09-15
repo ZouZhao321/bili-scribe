@@ -194,7 +194,15 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     """处理 transcribe 子命令."""
 
     # 执行转录
-    result = run_transcription(args.url, args.model)
+    result = run_transcription(
+        args.url,
+        args.model,
+        mode="whisper" if args.force_whisper else "auto",
+        language=args.language,
+        page=args.page,
+        cookie=args.cookie,
+        output_dir=Path(args.output) if args.output else None,
+    )
 
     if not result["success"]:
         print(result["error"], file=sys.stderr)
@@ -285,6 +293,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
     # 复用 download_collection.py 中的逻辑
     url = args.url
     model = args.model
+    output_dir = Path(args.output) if args.output else None
 
     # 解析 BV ID
     print("=" * 60)
@@ -336,7 +345,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         print(f"   链接: https://www.bilibili.com/video/{bv}/")
 
         try:
-            result = run_transcription(bv, model=model)
+            result = run_transcription(bv, model=model, output_dir=output_dir)
             if result["success"]:
                 success += 1
                 print(f"   ✅ 完成，文稿行数: {result.get('lines', 0)}")
