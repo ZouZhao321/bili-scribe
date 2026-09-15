@@ -93,14 +93,18 @@ do_rsync() {
 
 warn_stray() {
 	# warn_stray <目录> <归档模式>
-	# 复制阶段只取匹配该模式的文件；其余文件既不归档、也不参与校验、回传后也不会被清空。
+	# 归档集合严格等于复制阶段实际会拷的东西：顶层、非隐藏、匹配该模式的常规文件。
+	# 其余内容（非该模式、隐藏文件、子目录）既不归档、也不参与校验、回传后也不会被清空。
 	# 明说这件事，避免「校验口径与复制口径不一致」再次以静默方式发生。
 	local dir="$1" pattern="$2" n=0
 	if [ -d "$dir" ]; then
-		n=$(find "$dir" -maxdepth 1 -type f ! -name "$pattern" | wc -l | tr -d ' ')
+		n=$(find "$dir" -mindepth 1 -maxdepth 1 \
+			! \( -type f -a ! -name '.*' -a -name "$pattern" \) -print 2>/dev/null |
+			wc -l | tr -d ' ') || n=0
 	fi
 	if [ "$n" -gt 0 ]; then
-		say "  ⚠ $n 个非 $pattern 文件不归档（不参与校验，回传后也保留在 WSL 侧）"
+		say "  ⚠ 顶层 $n 项不是「非隐藏的 $pattern 文件」，不归档（子目录内容同样不归档）"
+		say "     它们不参与校验、回传后也保留在 WSL 侧"
 	fi
 	return 0
 }
@@ -187,7 +191,9 @@ verify_tree() {
 	local n=0 bad=0 shown=0 f rel
 	local -a selector=(-type f)
 	if [ -n "$pattern" ]; then
-		selector=(-maxdepth 1 -type f -name "$pattern")
+		# ! -name '.*' 必须保留：复制阶段用的是 shell glob，而 glob 默认不匹配点文件，
+		# 而 find -name 会匹配。漏掉这个条件就会让隐藏的 *.json / *.log 变成「目标缺失」。
+		selector=(-maxdepth 1 -type f -name "$pattern" ! -name '.*')
 	fi
 	while IFS= read -r -d '' f; do
 		rel="${f:$((${#src} + 1))}"
