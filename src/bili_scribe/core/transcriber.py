@@ -4,6 +4,43 @@
 """
 
 import math
+import sys
+from collections import OrderedDict
+from typing import Any
+
+# 模型实例上限：同时最多常驻 2 个（tiny 75MB ~ large-v3 2.9GB），
+# 超出后按 LRU 淘汰最久未用实例，释放其内存。
+_MODEL_CACHE_MAX = 2
+_MODEL_CACHE: OrderedDict[tuple[str, str, str], Any] = OrderedDict()
+
+
+def _get_model(whisper_model_cls: type, model_size: str, device: str = "cpu", compute_type: str = "int8") -> Any:
+    """按 (模型, 设备, 计算精度) 复用 WhisperModel 实例。
+
+    Worker 串行转录多个任务时，避免每次都从磁盘重读模型文件。
+
+    参数：
+        whisper_model_cls: WhisperModel 类，由调用方导入，便于测试替换。
+        model_size: Whisper 模型大小。
+        device: 推理设备。
+        compute_type: 计算精度。
+
+    返回：
+        缓存中的 WhisperModel 实例；未命中时构造并写入缓存。
+    """
+    # Worker 单线程串行转录（ADR-0005），缓存无需加锁；引入并发转录时需补锁。
+    key = (model_size, device, compute_type)
+    cached = _MODEL_CACHE.get(key)
+    if cached is not None:
+        _MODEL_CACHE.move_to_end(key)  # 命中即刷新，使 LRU 顺序反映真实使用
+        return cached
+
+    print(f"正在加载 Whisper 模型 ({model_size}, {device.upper()})...", file=sys.stderr)
+    model = whisper_model_cls(model_size, device=device, compute_type=compute_type)
+    _MODEL_CACHE[key] = model
+    while len(_MODEL_CACHE) > _MODEL_CACHE_MAX:
+        _MODEL_CACHE.popitem(last=False)  # 丢弃最久未用实例的引用，交由 GC 释放内存
+    return model
 
 
 def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = "small") -> list | None:
@@ -27,8 +64,7 @@ def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = 
         return None
 
     try:
-        print(f"正在加载 Whisper 模型 ({model_size}, CPU)...", file=__import__("sys").stderr)
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        model = _get_model(WhisperModel, model_size)
         print("正在转录...", file=__import__("sys").stderr)
         segments, info = model.transcribe(audio_path, language=language, beam_size=5)
         print(f"检测到语言: {info.language} (概率: {info.language_probability:.2f})", file=__import__("sys").stderr)
