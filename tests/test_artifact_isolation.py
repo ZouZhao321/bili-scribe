@@ -87,3 +87,26 @@ def test_dir_name_stays_parseable_for_downstream_scripts(offline):
     assert name.endswith("_base")
     match = re.match(r"(BV[a-zA-Z0-9]+)", name)
     assert match is not None and match.group(1) == BVID
+
+
+def test_超长中文标题不超目录名上限(offline, monkeypatch):
+    """单级目录名上限是 255 **字节**（ext4/APFS），中文一字 3 字节。
+
+    模型后缀是在已经接近上限的名字后面追加字节，必须靠字节预算兜住，
+    否则 OSError: [Errno 36] File name too long 会冒泡成任务硬失败。
+    """
+    monkeypatch.setattr(
+        runner,
+        "get_video_info",
+        lambda bvid: {"title": "测" * 120, "duration": 60, "owner": {"name": "up"}},
+    )
+
+    for model in ("base", "large-v3"):
+        assert _run(offline, model)["success"] is True
+
+    names = [p.name for p in offline.iterdir() if p.is_dir()]
+    assert len(names) == 2, f"异模型应各自建目录，实际: {names}"
+    for n in names:
+        assert len(n.encode("utf-8")) <= 255, f"{n!r} 长度 {len(n.encode('utf-8'))} 字节超过上限"
+    assert any(n.endswith("_base") for n in names)
+    assert any(n.endswith("_large-v3") for n in names)
