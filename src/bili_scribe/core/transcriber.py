@@ -3,6 +3,7 @@
 这是项目中唯一与 faster-whisper 交互的模块，不包含任何 B 站 API 逻辑。
 """
 
+import gc
 import math
 import sys
 from collections import OrderedDict
@@ -11,11 +12,29 @@ from typing import Any
 # 模型实例上限：同时最多常驻 2 个（tiny 75MB ~ large-v3 2.9GB），
 # 超出后按 LRU 淘汰最久未用实例，释放其内存。
 _MODEL_CACHE_MAX = 2
-_MODEL_CACHE: OrderedDict[tuple[str, str, str], Any] = OrderedDict()
+# 键含模型类：本函数刻意接收 whisper_model_cls 以便替换实现/测试打桩，
+# 若键里不含类，测试用的假类会占掉真实类的缓存槽（反之亦然），造成类型错配。
+_MODEL_CACHE: OrderedDict[tuple[type, str, str, str], Any] = OrderedDict()
+
+
+def clear_model_cache() -> int:
+    """释放全部缓存的模型实例，返回被释放的个数。
+
+    缓存实例常驻整个进程生命周期，而 web/worker.py 的准入检查只看当前可用内存：
+    若空闲的缓存模型把可用内存压到阀值以下，Worker 会一直跳过任务，
+    也就永远不会触发新的模型加载与 LRU 淘汰 —— 形成任务永久饥饿。
+    内存吃紧时由调用方主动让路，代价仅是下次重新加载模型。
+    """
+    n = len(_MODEL_CACHE)
+    _MODEL_CACHE.clear()
+    # 强制回收：否则解释器不保证立即把原生内存还给操作系统，
+    # 调用方随后重读的可用内存不会变化，让路就白做了。
+    gc.collect()
+    return n
 
 
 def _get_model(whisper_model_cls: type, model_size: str, device: str = "cpu", compute_type: str = "int8") -> Any:
-    """按 (模型, 设备, 计算精度) 复用 WhisperModel 实例。
+    """按 (模型类, 模型, 设备, 计算精度) 复用 WhisperModel 实例。
 
     Worker 串行转录多个任务时，避免每次都从磁盘重读模型文件。
 
@@ -29,17 +48,21 @@ def _get_model(whisper_model_cls: type, model_size: str, device: str = "cpu", co
         缓存中的 WhisperModel 实例；未命中时构造并写入缓存。
     """
     # Worker 单线程串行转录（ADR-0005），缓存无需加锁；引入并发转录时需补锁。
-    key = (model_size, device, compute_type)
+    key = (whisper_model_cls, model_size, device, compute_type)
     cached = _MODEL_CACHE.get(key)
     if cached is not None:
         _MODEL_CACHE.move_to_end(key)  # 命中即刷新，使 LRU 顺序反映真实使用
         return cached
 
+    # 先腾位再加载：否则加载期间会同时驻留 _MODEL_CACHE_MAX + 1 个实例，
+    # large-v3（≈2.9GB）+ medium（≈1.5GB）场景下峰值逼近 9GB，
+    # 正是本 issue 要压下去的内存压力。
+    while _MODEL_CACHE and len(_MODEL_CACHE) >= _MODEL_CACHE_MAX:
+        _MODEL_CACHE.popitem(last=False)
+
     print(f"正在加载 Whisper 模型 ({model_size}, {device.upper()})...", file=sys.stderr)
     model = whisper_model_cls(model_size, device=device, compute_type=compute_type)
     _MODEL_CACHE[key] = model
-    while len(_MODEL_CACHE) > _MODEL_CACHE_MAX:
-        _MODEL_CACHE.popitem(last=False)  # 丢弃最久未用实例的引用，交由 GC 释放内存
     return model
 
 

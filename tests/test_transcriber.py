@@ -80,26 +80,29 @@ class TestGetModelCache:
     def test_超过上限淘汰最久未使用的实例(self):
         created = []
         fake = _make_fake_model(created)
+        limit = transcriber._MODEL_CACHE_MAX
+        assert limit >= 2, "本用例假定缓存上限不小于 2"
 
-        tiny = transcriber._get_model(fake, "tiny")
-        base = transcriber._get_model(fake, "base")
-        transcriber._get_model(fake, "tiny")  # 命中 tiny，使 base 成为最久未使用
-        small = transcriber._get_model(fake, "small")  # 触发淘汰 base
+        oldest = transcriber._get_model(fake, "tiny")
+        others = [transcriber._get_model(fake, f"m{i}") for i in range(limit - 1)]
+        transcriber._get_model(fake, "tiny")  # 命中 tiny，使 others[0] 成为最久未使用
+        transcriber._get_model(fake, "overflow")  # 触发淘汰
 
-        assert transcriber._get_model(fake, "tiny") is tiny
-        assert transcriber._get_model(fake, "small") is small
-        assert transcriber._get_model(fake, "base") is not base, "base 应已被淘汰并重新构造"
-        assert len(created) == 4
+        assert transcriber._get_model(fake, "tiny") is oldest, "被刷新过的实例不应被淘汰"
+        assert transcriber._get_model(fake, "m0") is not others[0], "最久未使用的实例应被淘汰并重新构造"
 
-    def test_淘汰后只保留最新的两个(self):
+    def test_淘汰后只保留最新的N个(self):
         created = []
         fake = _make_fake_model(created)
+        limit = transcriber._MODEL_CACHE_MAX
 
-        for size in ("tiny", "base", "small", "medium"):
-            transcriber._get_model(fake, size)
+        for i in range(limit + 2):
+            transcriber._get_model(fake, f"m{i}")
 
-        assert len(transcriber._MODEL_CACHE) == transcriber._MODEL_CACHE_MAX
-        assert list(transcriber._MODEL_CACHE) == [("small", "cpu", "int8"), ("medium", "cpu", "int8")]
+        assert len(transcriber._MODEL_CACHE) == limit
+        # 缓存键包含模型类（见 _MODEL_CACHE 注释），因此期望值也必须带上 fake
+        expected = [(fake, f"m{i}", "cpu", "int8") for i in range(2, limit + 2)]
+        assert list(transcriber._MODEL_CACHE) == expected
 
 
 class TestWhisperTranscribeCache:
@@ -125,7 +128,10 @@ class TestWhisperTranscribeCache:
         transcriber.whisper_transcribe(str(audio), "zh", "base")
         assert "正在加载 Whisper 模型" in capsys.readouterr().err
 
-        transcriber.whisper_transcribe(str(audio), "zh", "base")
+        second = transcriber.whisper_transcribe(str(audio), "zh", "base")
+        # 先确认第二次真的成功了：whisper_transcribe 吞掉一切异常并返回 None，
+        # 若它失败了，「不打印加载日志」也会成立，断言就成了空过。
+        assert second is not None, "第二次转录必须成功，否则下面的否定断言没有意义"
         assert "正在加载 Whisper 模型" not in capsys.readouterr().err
 
     def test_返回结构保持不变(self, tmp_path, monkeypatch):
@@ -156,6 +162,93 @@ class TestWhisperTranscribeCache:
         audio.write_bytes(b"fake-audio")
 
         assert transcriber.whisper_transcribe(str(audio), "zh", "base") is None
+
+
+class TestCachePeakAndIsolation:
+    """缓存上限的“峰值”语义与缓存键隔离（ocr 审查 4b6f66c 报出）。"""
+
+    def test_加载前先淘汰_构造时驻留数低于上限(self):
+        """先腾位再加载：否则加载瞬间会同时驻留 MAX+1 个实例（large-v3 场景峰值近 9GB）。"""
+        created = []
+        base_fake = _make_fake_model(created)
+        sizes_at_construct: list[int] = []
+
+        class Recording(base_fake):  # type: ignore[misc, valid-type]
+            def __init__(self, *args, **kwargs):
+                sizes_at_construct.append(len(transcriber._MODEL_CACHE))
+                super().__init__(*args, **kwargs)
+
+        limit = transcriber._MODEL_CACHE_MAX
+        for i in range(limit + 2):
+            transcriber._get_model(Recording, f"m{i}")
+
+        assert max(sizes_at_construct) < limit, (
+            f"构造新模型时缓存里已有 {max(sizes_at_construct)} 个实例（上限 {limit}），"
+            "说明是先加载后淘汰，峰值会超过上限"
+        )
+
+    def test_不同模型类不共用缓存槽(self):
+        """缓存键含模型类 —— 否则测试用的假类会占掉真实类的槽位（类型错配）。"""
+        created_a: list = []
+        created_b: list = []
+        fake_a = _make_fake_model(created_a)
+        fake_b = _make_fake_model(created_b)
+
+        a = transcriber._get_model(fake_a, "base")
+        b = transcriber._get_model(fake_b, "base")
+
+        assert a is not b
+        assert len(created_a) == 1 and len(created_b) == 1
+
+    def test_clear_model_cache_释放全部实例(self):
+        created = []
+        fake = _make_fake_model(created)
+        transcriber._get_model(fake, "base")
+
+        assert transcriber.clear_model_cache() == 1
+        assert len(transcriber._MODEL_CACHE) == 0
+        # 再次调用无实例可释放
+        assert transcriber.clear_model_cache() == 0
+
+
+class TestWorkerMemoryRelease:
+    """Worker 的内存准入必须与模型缓存协同，否则会任务永久饥饿（issue #33）。
+
+    缓存的空闲模型常驻内存，而准入检查只看可用内存：若缓存把可用内存压到阀值
+    以下，任务因不达标而永不出队，就不会触发新的模型加载与 LRU 淘汰 —— 死锁。
+    """
+
+    def _patch(self, monkeypatch, readings):
+        from bili_scribe.web import worker as worker_module
+
+        released: list[bool] = []
+
+        def _fake_clear() -> int:
+            released.append(True)
+            return 1
+
+        monkeypatch.setattr(worker_module, "clear_model_cache", _fake_clear)
+        iterator = iter(readings)
+        monkeypatch.setattr(worker_module, "get_available_memory_mb", lambda: next(iterator))
+        monkeypatch.setattr(worker_module, "get_cpu_usage", lambda: 0)
+        return worker_module, released
+
+    def test_内存不足时先释放缓存再复查(self, monkeypatch):
+        # 首次读内存严重不足，释放缓存后充足
+        worker_module, released = self._patch(monkeypatch, [100, 999_999])
+
+        ok, reason = worker_module.Worker()._check_resources("large-v3")
+
+        assert released, "内存不足时应先释放模型缓存"
+        assert ok, f"释放缓存后复查应放行，实际: {reason}"
+
+    def test_释放后仍不足则拒绝(self, monkeypatch):
+        worker_module, released = self._patch(monkeypatch, [100, 100])
+
+        ok, reason = worker_module.Worker()._check_resources("large-v3")
+
+        assert released
+        assert not ok and "内存不足" in reason
 
 
 if __name__ == "__main__":
