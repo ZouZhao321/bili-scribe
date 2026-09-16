@@ -129,11 +129,21 @@ def run_transcription(
         print(f"[runner] 获取视频信息失败，降级使用默认标题: {e}", file=sys.stderr)
         pass
 
-    # 3. 创建安全文件名（BV号_标题，标题截断 100 字符）
+    # 3. 创建安全文件名（BV号_标题_模型）
+    # 模型标识必须进目录名：同一视频用不同模型转录时产物共存，不允许静默覆盖。
+    # 下游脚本（update_author_map.py、migrate_*.py）用 re.match(r"BV[a-zA-Z0-9]+", name)
+    # 解析目录名，模型后缀在末尾不影响解析。
     safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
-    filename = f"{bvid}_{safe_title}"
+    suffix = f"_{model}"
+    # 单级目录名上限是 255 **字节**（ext4/APFS），而中文一字 3 字节、Python 按字符截断：
+    # 纯中文 80 字（245 字节）在加模型后缀后就会 OSError: [Errno 36] File name too long。
+    # 因此标题必须按字节预算截断，为 BV 号与模型后缀留出空间。
+    budget = max(255 - len(f"{bvid}_{suffix}".encode()), 0)
+    safe_title = safe_title.encode()[:budget].decode("utf-8", errors="ignore")
+    filename = f"{bvid}_{safe_title}{suffix}"
 
-    # 4. 创建视频专属目录 out/BV号_标题/
+    # 4. 创建视频专属目录 out/BV号_标题_模型/
+    # 同模型重跑会复用同一目录并覆盖文稿（retry 需要幂等）；异模型各自独立。
     video_dir = OUTPUT_DIR / filename
     video_dir.mkdir(parents=True, exist_ok=True)
 
