@@ -91,6 +91,24 @@ do_rsync() {
 	fi
 }
 
+warn_stray() {
+	# warn_stray <目录> <归档模式>
+	# 归档集合严格等于复制阶段实际会拷的东西：顶层、非隐藏、匹配该模式的常规文件。
+	# 其余内容（非该模式、隐藏文件、子目录）既不归档、也不参与校验、回传后也不会被清空。
+	# 明说这件事，避免「校验口径与复制口径不一致」再次以静默方式发生。
+	local dir="$1" pattern="$2" n=0
+	if [ -d "$dir" ]; then
+		n=$(find "$dir" -mindepth 1 -maxdepth 1 \
+			! \( -type f -a ! -name '.*' -a -name "$pattern" \) -print 2>/dev/null |
+			wc -l | tr -d ' ') || n=0
+	fi
+	if [ "$n" -gt 0 ]; then
+		say "  ⚠ 顶层 $n 项不是「非隐藏的 $pattern 文件」，不归档（子目录内容同样不归档）"
+		say "     它们不参与校验、回传后也保留在 WSL 侧"
+	fi
+	return 0
+}
+
 # ── 前置检查 ────────────────────────────────────────────────────────────────
 say "═══ 回传 WSL → Windows ═══"
 say "WSL 仓库:   $REPO_ROOT"
@@ -141,6 +159,7 @@ else
 	say "② 任务记录: 无（跳过）"
 	TASKS_OK=0
 fi
+warn_stray "$SRC_TASKS" '*.json'
 
 # ── 3. 运行日志 logs/*.log ──────────────────────────────────────────────────
 say ""
@@ -158,14 +177,24 @@ else
 	say "③ 运行日志: 无（跳过，约定写入 $SRC_LOGS/）"
 	LOGS_OK=0
 fi
+warn_stray "$SRC_LOGS" '*.log'
 
 # ── 4. 校验：源侧每个文件都必须在目标落盘且大小一致 ──────────────────────
 # 目标可能已有历史内容（同一天多次回传）或同名文件需被覆盖，
 # 因此不能比“总数”，必须逐文件核对存在性与大小。
+# 选择器必须与复制阶段完全一致：产物走 rsync 整树复制，任务记录/日志只取顶层 *.json / *.log。
 verify_tree() {
-	# verify_tree <源目录> <目标目录> <标签>
-	local src="$1" dst="$2" label="$3"
+	# verify_tree <源目录> <目标目录> <标签> [文件名模式]
+	#   省略模式 → 递归核对全部文件
+	#   给出模式 → 只核对 maxdepth 1 下匹配的文件
+	local src="$1" dst="$2" label="$3" pattern="${4:-}"
 	local n=0 bad=0 shown=0 f rel
+	local -a selector=(-type f)
+	if [ -n "$pattern" ]; then
+		# ! -name '.*' 必须保留：复制阶段用的是 shell glob，而 glob 默认不匹配点文件，
+		# 而 find -name 会匹配。漏掉这个条件就会让隐藏的 *.json / *.log 变成「目标缺失」。
+		selector=(-maxdepth 1 -type f -name "$pattern" ! -name '.*')
+	fi
 	while IFS= read -r -d '' f; do
 		rel="${f:$((${#src} + 1))}"
 		n=$((n + 1))
@@ -178,7 +207,7 @@ verify_tree() {
 			shown=$((shown + 1))
 			bad=$((bad + 1))
 		fi
-	done < <(find "$src" -type f -print0)
+	done < <(find "$src" "${selector[@]}" -print0)
 	if [ "$bad" = 0 ]; then
 		say "  ✓ $label: $n 个文件均已落盘且大小一致"
 		return 0
@@ -195,10 +224,10 @@ if [ "$DRY_RUN" = 0 ]; then
 		verify_tree "$SRC_OUT" "$DEST" "产物" || fail=1
 	fi
 	if [ "$TASKS_OK" = 1 ]; then
-		verify_tree "$SRC_TASKS" "$DEST/_tasks" "任务记录" || fail=1
+		verify_tree "$SRC_TASKS" "$DEST/_tasks" "任务记录" '*.json' || fail=1
 	fi
 	if [ "$LOGS_OK" = 1 ]; then
-		verify_tree "$SRC_LOGS" "$DEST/_logs" "日志" || fail=1
+		verify_tree "$SRC_LOGS" "$DEST/_logs" "日志" '*.log' || fail=1
 	fi
 	if [ "$fail" = 1 ]; then
 		echo "✗ 校验失败，**保留 WSL 侧内容不做清理**，请人工核对。" >&2
