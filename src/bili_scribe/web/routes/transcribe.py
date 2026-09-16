@@ -272,6 +272,7 @@ async def submit_transcribe(req: TranscribeRequest):
         mode=req.mode,
         model=req.model,
         language=req.language,
+        initial_prompt=req.initial_prompt,
         page=req.page,
         output_format=req.output_format,
         cookie=req.cookie,
