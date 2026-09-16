@@ -24,6 +24,7 @@ from pathlib import Path
 
 from bili_scribe.core.bilibili import extract_bvid, get_collection_info, get_video_info
 from bili_scribe.core.runner import run_transcription
+from bili_scribe.core.transcriber import format_srt
 
 VERSION = "1.0.0"
 
@@ -194,7 +195,15 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     """处理 transcribe 子命令."""
 
     # 执行转录
-    result = run_transcription(args.url, args.model)
+    result = run_transcription(
+        args.url,
+        args.model,
+        mode="whisper" if args.force_whisper else "auto",
+        language=args.language,
+        page=args.page,
+        cookie=args.cookie,
+        output_dir=Path(args.output) if args.output else None,
+    )
 
     if not result["success"]:
         print(result["error"], file=sys.stderr)
@@ -202,10 +211,9 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
 
     # 输出结果
     if args.format == "srt":
-        srt_path = result.get("srt")
-        if srt_path:
-            text = Path(srt_path).read_text(encoding="utf-8")
-            print(text)
+        # 直接从结果里的字幕列表生成 SRT。run_transcription 不落 SRT 文件，
+        # 原实现读的 result["srt"] 这个键从来不存在，导致 -f srt 静默无输出。
+        print(format_srt(result.get("subtitles") or []))
     elif args.format == "json":
         import json
 
@@ -213,11 +221,12 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     else:
         # text 格式
         if args.quiet:
-            print(result.get("srt", ""))
+            # -q 只输出文稿路径，便于管道消费（原先打印的是不存在的 srt 键，只会输出空行）
+            print(result.get("transcript", ""))
         else:
             print(f"✓ 转录完成: {result.get('title', '')}")
             print(f"  BV:       {result.get('bv', '')}")
-            print(f"  SRT 字幕: {result.get('srt', '')}")
+            print(f"  文稿:     {result.get('transcript', '')}")
             audio = result.get("audio")
             if audio:
                 print(f"  音频:     {audio}")
@@ -285,6 +294,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
     # 复用 download_collection.py 中的逻辑
     url = args.url
     model = args.model
+    output_dir = Path(args.output) if args.output else None
 
     # 解析 BV ID
     print("=" * 60)
@@ -336,7 +346,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         print(f"   链接: https://www.bilibili.com/video/{bv}/")
 
         try:
-            result = run_transcription(bv, model=model)
+            result = run_transcription(bv, model=model, output_dir=output_dir)
             if result["success"]:
                 success += 1
                 print(f"   ✅ 完成，文稿行数: {result.get('lines', 0)}")
