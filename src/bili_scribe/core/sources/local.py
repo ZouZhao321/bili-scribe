@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -54,11 +55,9 @@ class LocalFileSource:
         """
         title = self._title_override or self.path.stem
         # 目录名：默认标题（与源标识相同）时单段，覆盖标题时双段拼接
-        if self._title_override:
-            safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
-            dir_name = f"{self.path.stem}_{safe_title}"
-        else:
-            dir_name = self.path.stem
+        # 覆盖标题需清理 Windows 保留字符（: * ? " < > | 等），否则 mkdir 抛 OSError
+        safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", title[:100]).replace(" ", "_")
+        dir_name = f"{self.path.stem}_{safe_title}" if self._title_override else self.path.stem
         return {
             "title": title,
             "author": self._author_override,

@@ -114,7 +114,7 @@ def transcribe_source(
 
     if not subtitles:
         error = getattr(source, "get_error", lambda: "")()
-        return {"success": False, "error": error or "转录失败: 无可用字幕且 Whisper 未产出结果"}
+        return {"success": False, "error": error or "该视频没有可用字幕"}
 
     # 5. 写入文稿
     # 确保字幕也包含置信度字段（默认 0.99）

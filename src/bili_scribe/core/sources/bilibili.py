@@ -58,6 +58,7 @@ class BilibiliSource:
         self._info: dict = {}
         self._cid: str | None = None
         self._cid_error: str = ""
+        self._audio_error: str = ""
 
     # ------------------------------------------------------------------
     # MediaSource 协议实现
@@ -133,7 +134,12 @@ class BilibiliSource:
             return None
 
         # DASH 格式：直接下载音频流
-        audio_url = get_audio_url(self.bvid, cid)
+        try:
+            audio_url = get_audio_url(self.bvid, cid)
+        except (Exception, SystemExit) as e:  # noqa: BLE001  # api_get 以 sys.exit(1) 报错；协议约定失败返回 None
+            self._audio_error = f"获取音频流失败: {type(e).__name__}（详见 stderr）"
+            print(f"[bilibili] 获取音频流失败: {e}", file=sys.stderr)
+            return None
         if audio_url:
             referer = f"https://www.bilibili.com/video/{self.bvid}/"
             if download_audio(audio_url, str(out_path), referer):
@@ -141,7 +147,12 @@ class BilibiliSource:
             return None
 
         # DASH 不可用，回退到 FLV 格式 → ffmpeg 提取音频
-        video_url = get_video_url(self.bvid, cid)
+        try:
+            video_url = get_video_url(self.bvid, cid)
+        except (Exception, SystemExit) as e:  # noqa: BLE001  # 同上：失败返回 None，不向上抛
+            self._audio_error = f"获取视频流失败: {type(e).__name__}（详见 stderr）"
+            print(f"[bilibili] 获取视频流失败: {e}", file=sys.stderr)
+            return None
         if not video_url:
             return None
         video_path = out_path.with_name("video.flv")  # 与原 runner 临时文件名保持一致
@@ -184,6 +195,8 @@ class BilibiliSource:
         返回:
             与原 runner 输出逐行一致的文本行列表（恒非空）。
         """
+        if not self._info:  # 独立调用时先拉取元数据，避免写出全默认值的「视频信息.txt」
+            self.get_metadata()
         info = self._info
         bvid = self.bvid
         title = info.get("title", bvid)
@@ -234,7 +247,7 @@ class BilibiliSource:
 
     def get_error(self) -> str:
         """返回最近一次获取失败的描述，无错误返回空字符串."""
-        return self._cid_error
+        return self._audio_error or self._cid_error
 
     # ------------------------------------------------------------------
     # 内部工具
@@ -259,5 +272,5 @@ class BilibiliSource:
             self._cid = str(cid)
             return self._cid
         except (Exception, SystemExit) as e:  # noqa: BLE001  # 与 runner 原行为一致：CID 获取失败转为任务失败返回
-            self._cid_error = f"获取 CID 失败: {e}"
+            self._cid_error = f"获取 CID 失败: {type(e).__name__} {e}（详见 stderr 输出）"
             return None

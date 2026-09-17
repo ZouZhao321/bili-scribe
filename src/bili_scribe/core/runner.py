@@ -41,8 +41,8 @@ def run_transcription(
     """
     try:
         source = BilibiliSource(url=url, page=page, cookie=cookie)
-    except SystemExit:  # extract_bvid 以 sys.exit(1) 报错，实际原因已打印至 stderr
-        return {"success": False, "error": "URL 解析失败: 无法解析出有效的 BV ID"}
+    except SystemExit:  # extract_bvid/api_get 以 sys.exit(1) 报错，实际原因已打印至 stderr
+        return {"success": False, "error": "URL 解析/请求失败: 无法获取有效的 BV ID（详见 stderr）"}
     except Exception as e:  # noqa: BLE001  # 构造失败（网络/解析异常）转为任务失败返回，不向上抛
         return {"success": False, "error": f"URL 解析失败: {e}"}
     return transcribe_source(
