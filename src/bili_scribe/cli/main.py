@@ -23,7 +23,9 @@ import sys
 from pathlib import Path
 
 from bili_scribe.core.bilibili import extract_bvid, get_collection_info, get_video_info
+from bili_scribe.core.pipeline import transcribe_source
 from bili_scribe.core.runner import run_transcription
+from bili_scribe.core.sources.local import LocalFileSource
 
 VERSION = "1.0.0"
 
@@ -45,7 +47,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     # -- transcribe -----------------------------------------------------------
     p_trans = sub.add_parser("transcribe", help="转录单个视频")
-    p_trans.add_argument("url", help="B站视频链接或 BV 号")
+    p_trans.add_argument(
+        "url",
+        nargs="?",
+        default="",
+        help="B站视频链接或 BV 号（与 --file 二选一）",
+    )
+    p_trans.add_argument(
+        "--file",
+        default="",
+        help="本地视频/音频文件路径（与 url 二选一，仅 Whisper 转录）",
+    )
+    p_trans.add_argument(
+        "--title",
+        default="",
+        help="本地文件标题覆盖（默认取文件名去扩展名）",
+    )
+    p_trans.add_argument(
+        "--author",
+        default="",
+        help="本地文件作者覆盖（默认空）",
+    )
     p_trans.add_argument(
         "-m",
         "--model",
@@ -193,8 +215,25 @@ def build_parser() -> argparse.ArgumentParser:
 def cmd_transcribe(args: argparse.Namespace) -> None:
     """处理 transcribe 子命令."""
 
-    # 执行转录
-    result = run_transcription(args.url, args.model)
+    # 执行转录：本地文件 → LocalFileSource（仅 Whisper）；否则 → B站 URL
+    if args.file:
+        try:
+            source = LocalFileSource(args.file, title=args.title, author=args.author)
+        except FileNotFoundError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        result = transcribe_source(source, model=args.model, language=args.language)
+    else:
+        if not args.url:
+            print("错误: 必须提供 url 或 --file", file=sys.stderr)
+            sys.exit(1)
+        result = run_transcription(
+            args.url,
+            args.model,
+            language=args.language,
+            page=args.page,
+            cookie=args.cookie,
+        )
 
     if not result["success"]:
         print(result["error"], file=sys.stderr)
@@ -216,7 +255,10 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
             print(result.get("srt", ""))
         else:
             print(f"✓ 转录完成: {result.get('title', '')}")
-            print(f"  BV:       {result.get('bv', '')}")
+            if args.file:
+                print(f"  文件:     {result.get('source_id', '')}")
+            else:
+                print(f"  BV:       {result.get('bv', '')}")
             print(f"  SRT 字幕: {result.get('srt', '')}")
             audio = result.get("audio")
             if audio:
