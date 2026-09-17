@@ -41,6 +41,8 @@ class BilibiliSource:
         cookie: B 站登录 Cookie。
     """
 
+    supports_subtitles = True  # B 站视频可能有 CC/AI 字幕
+
     def __init__(self, url: str, page: int = 0, cookie: str = "") -> None:
         """初始化 B 站源.
 
@@ -187,8 +189,15 @@ class BilibiliSource:
             )
         except (subprocess.CalledProcessError, OSError) as e:
             # ffmpeg 缺失或提取失败：符合协议约定返回 None，不向上抛；残留临时文件一并清理
-            self._audio_error = f"ffmpeg 提取音频失败: {type(e).__name__}（详见 stderr）"
-            print(f"[bilibili] ffmpeg 提取音频失败: {e}", file=sys.stderr)
+            detail = getattr(e, "stderr", None)
+            if isinstance(detail, bytes):
+                detail_str = detail.decode("utf-8", "replace").strip()
+            elif detail:
+                detail_str = str(detail)
+            else:
+                detail_str = ""
+            self._audio_error = f"ffmpeg 提取音频失败: {type(e).__name__}"
+            print(f"[bilibili] ffmpeg 提取音频失败: {type(e).__name__}: {detail_str or e}", file=sys.stderr)
             _best_effort_unlink(video_path)
             _best_effort_unlink(out_path)  # 清理可能被部分写入的目标文件
             return None

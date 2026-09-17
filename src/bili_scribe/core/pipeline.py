@@ -119,7 +119,13 @@ def transcribe_source(
 
     if not subtitles:
         error = getattr(source, "get_error", lambda: "")()
-        return {"success": False, "error": error or "该视频没有可用字幕"}
+        if error:
+            # 源层有明确获取失败（CID/音频流等）→ 透出真实诊断
+            return {"success": False, "error": error}
+        if not getattr(source, "supports_subtitles", True):
+            # 本地文件无内置字幕概念，Whisper 未产出 → 专属提示（B站保持原字面量）
+            return {"success": False, "error": "转录失败: 未产生任何转录内容（本地文件无内置字幕，需 Whisper 产出）"}
+        return {"success": False, "error": "该视频没有可用字幕"}
 
     # 5. 写入文稿
     # 确保字幕也包含置信度字段（默认 0.99）

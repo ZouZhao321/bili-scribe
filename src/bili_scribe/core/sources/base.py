@@ -25,6 +25,15 @@ class MediaSource(Protocol):
         """源唯一标识."""
         ...
 
+    @property
+    def supports_subtitles(self) -> bool:
+        """源是否可能有内置字幕（决定无字幕失败时的兜底文案）. 默认 True.
+
+        返回:
+            True 表示源可能有字幕（如 B站），False 表示无字幕概念（如本地文件）。
+        """
+        ...
+
     def get_metadata(self) -> dict:
         """获取元数据.
 

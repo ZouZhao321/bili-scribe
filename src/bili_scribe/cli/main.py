@@ -99,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-w",
         "--force-whisper",
         action="store_true",
-        help="强制使用 Whisper（跳过字幕）",
+        help="强制使用 Whisper（跳过字幕；本地 --file 恒走 Whisper，此参数对本地无效）",
     )
     p_trans.add_argument(
         "-o",

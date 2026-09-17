@@ -12,12 +12,21 @@ import subprocess
 from pathlib import Path
 
 
+def _fit_bytes(s: str, max_bytes: int = 250) -> str:
+    """按 UTF-8 字节预算截断字符串（避免切断多字节字符），空则回退下划线."""
+    while s and len(s.encode("utf-8")) > max_bytes:
+        s = s[:-1]
+    return s or "_"
+
+
 class LocalFileSource:
     """本地媒体文件源 — 文件路径 → 直接转录.
 
     属性:
         path: 本地媒体文件路径。
     """
+
+    supports_subtitles = False  # 本地文件无内置字幕，转录恒走 Whisper
 
     def __init__(self, path: str | Path, title: str = "", author: str = "") -> None:
         """初始化本地源.
@@ -58,7 +67,9 @@ class LocalFileSource:
         # 覆盖标题需清理 Windows 保留字符（: * ? " < > | 等）与尾随点/空格（Windows 静默去除，
         # 会造成 dir_name 与实际创建目录不一致），否则 mkdir 抛 OSError 或目录名漂移
         safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", title[:100]).replace(" ", "_").rstrip(" .") or "_"
-        dir_name = f"{self.path.stem}_{safe_title}" if self._title_override else self.path.stem
+        # 覆盖标题：拼接后按字节预算截断（防 ENAMETOOLONG）；默认标题：单段目录名（用户设计，
+        # 同名不同目录文件映射同一目录属已知限制，可配合 --title 覆盖消歧）
+        dir_name = _fit_bytes(f"{self.path.stem}_{safe_title}", 250) if self._title_override else self.path.stem
         return {
             "title": title,
             "author": self._author_override,
@@ -111,8 +122,8 @@ class LocalFileSource:
         ]
 
     def get_error(self) -> str:
-        """本地源无获取失败；转录无产出时返回本地专属提示（供 pipeline 透出）."""
-        return "转录失败: 未产生任何转录内容（本地文件无内置字幕，需 Whisper 产出）"
+        """本地源无获取失败概念，恒返回空字符串（符合协议契约）."""
+        return ""
 
     # ------------------------------------------------------------------
     # 内部工具
