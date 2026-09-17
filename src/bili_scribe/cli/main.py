@@ -61,12 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_trans.add_argument(
         "--title",
         default="",
-        help="本地文件标题覆盖（默认取文件名去扩展名）",
+        help="本地文件标题覆盖（默认取文件名去扩展名；仅 --file 时生效）",
     )
     p_trans.add_argument(
         "--author",
         default="",
-        help="本地文件作者覆盖（默认空）",
+        help="本地文件作者覆盖（默认空；仅 --file 时生效）",
     )
     p_trans.add_argument(
         "-m",

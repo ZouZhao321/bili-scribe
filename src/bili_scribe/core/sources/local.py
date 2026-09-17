@@ -55,8 +55,9 @@ class LocalFileSource:
         """
         title = self._title_override or self.path.stem
         # 目录名：默认标题（与源标识相同）时单段，覆盖标题时双段拼接
-        # 覆盖标题需清理 Windows 保留字符（: * ? " < > | 等），否则 mkdir 抛 OSError
-        safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", title[:100]).replace(" ", "_")
+        # 覆盖标题需清理 Windows 保留字符（: * ? " < > | 等）与尾随点/空格（Windows 静默去除，
+        # 会造成 dir_name 与实际创建目录不一致），否则 mkdir 抛 OSError 或目录名漂移
+        safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", title[:100]).replace(" ", "_").rstrip(" .") or "_"
         dir_name = f"{self.path.stem}_{safe_title}" if self._title_override else self.path.stem
         return {
             "title": title,
@@ -110,8 +111,8 @@ class LocalFileSource:
         ]
 
     def get_error(self) -> str:
-        """本地源无特殊获取错误，恒返回空字符串."""
-        return ""
+        """本地源无获取失败；转录无产出时返回本地专属提示（供 pipeline 透出）."""
+        return "转录失败: 未产生任何转录内容（本地文件无内置字幕，需 Whisper 产出）"
 
     # ------------------------------------------------------------------
     # 内部工具

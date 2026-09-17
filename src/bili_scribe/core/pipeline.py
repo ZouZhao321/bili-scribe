@@ -65,11 +65,12 @@ def transcribe_source(
         {"success": False, "error": "..."}
     """
     # 1. 元数据（源自身完成降级处理；异常时兜底默认值，保证恒返回结果字典）
+    log_prefix = f"[pipeline:{task_id}] " if task_id else "[pipeline] "
     meta: dict = {}
     try:
         meta = source.get_metadata()
     except (Exception, SystemExit) as e:  # noqa: BLE001  # 源实现异常降级为默认元数据，不向上抛（含 SystemExit）
-        print(f"[pipeline] 获取元数据失败，降级默认值: {e}", file=sys.stderr)
+        print(f"{log_prefix}获取元数据失败，降级默认值: {e}", file=sys.stderr)
     title = meta.get("title") or source.source_id
     duration = meta.get("duration", 0)
 
@@ -77,7 +78,11 @@ def transcribe_source(
     # 目录名优先采用源提供的 dir_name（本地默认标题时单段），否则恒双段拼接
     video_dir = out_dir / (meta.get("dir_name") or _build_dir_name(source.source_id, title))
     video_dir.mkdir(parents=True, exist_ok=True)
-    meta_lines = source.meta_lines()
+    try:
+        meta_lines = source.meta_lines()
+    except (Exception, SystemExit) as e:  # noqa: BLE001  # 与上方 get_metadata 一致：源实现异常降级为不写元数据文件
+        print(f"{log_prefix}生成元数据文件失败，跳过: {e}", file=sys.stderr)
+        meta_lines = []
     if meta_lines:
         (video_dir / "视频信息.txt").write_text("\n".join(meta_lines), encoding="utf-8")
 
@@ -88,7 +93,7 @@ def transcribe_source(
         try:
             fetched = source.get_subtitles()
         except (Exception, SystemExit) as e:  # noqa: BLE001  # 源实现异常降级为无字幕，保证恒返回结果字典（含 SystemExit）
-            print(f"[pipeline] 获取字幕失败，降级 Whisper: {e}", file=sys.stderr)
+            print(f"{log_prefix}获取字幕失败，降级 Whisper: {e}", file=sys.stderr)
             fetched = []
         if fetched:
             subtitles = fetched

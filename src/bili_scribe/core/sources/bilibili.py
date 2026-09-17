@@ -56,6 +56,7 @@ class BilibiliSource:
         self.page = page
         self.cookie = cookie
         self._info: dict = {}
+        self._metadata_loaded: bool = False  # 是否已尝试拉取元数据（区分"未拉取"与"拉取失败"）
         self._cid: str | None = None
         self._cid_error: str = ""
         self._audio_error: str = ""
@@ -81,6 +82,8 @@ class BilibiliSource:
         except (Exception, SystemExit) as e:  # noqa: BLE001  # 信息获取失败降级为默认值，与 runner 原行为一致
             print(f"[bilibili] 获取视频信息失败，降级使用默认标题: {e}", file=sys.stderr)
             self._info = {}
+        finally:
+            self._metadata_loaded = True  # 无论成败都标记已尝试，避免 meta_lines 重复拉取
         return {
             "title": self._info.get("title", self.bvid),
             "author": self._info.get("owner", {}).get("name", ""),
@@ -144,6 +147,7 @@ class BilibiliSource:
             referer = f"https://www.bilibili.com/video/{self.bvid}/"
             if download_audio(audio_url, str(out_path), referer):
                 return out_path
+            self._audio_error = "音频流下载失败: 下载未完成（详见 stderr）"
             return None
 
         # DASH 不可用，回退到 FLV 格式 → ffmpeg 提取音频
@@ -154,12 +158,15 @@ class BilibiliSource:
             print(f"[bilibili] 获取视频流失败: {e}", file=sys.stderr)
             return None
         if not video_url:
+            self._audio_error = "未获取到视频流 URL（DASH 与 FLV 均不可用）"
             return None
         video_path = out_path.with_name("video.flv")  # 与原 runner 临时文件名保持一致
         referer = f"https://www.bilibili.com/video/{self.bvid}/"
         if not download_audio(video_url, str(video_path), referer):
+            self._audio_error = "视频流下载失败: 下载未完成（详见 stderr）"
             return None
         if not video_path.exists():
+            self._audio_error = "视频流下载后文件缺失"
             return None
         try:
             subprocess.run(  # noqa: S603  # 参数来自本地文件路径/可信解析结果
@@ -195,7 +202,7 @@ class BilibiliSource:
         返回:
             与原 runner 输出逐行一致的文本行列表（恒非空）。
         """
-        if not self._info:  # 独立调用时先拉取元数据，避免写出全默认值的「视频信息.txt」
+        if not self._metadata_loaded:  # 独立调用时先拉取元数据，避免写出全默认值的「视频信息.txt」
             self.get_metadata()
         info = self._info
         bvid = self.bvid
