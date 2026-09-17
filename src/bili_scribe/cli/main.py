@@ -215,6 +215,11 @@ def build_parser() -> argparse.ArgumentParser:
 def cmd_transcribe(args: argparse.Namespace) -> None:
     """处理 transcribe 子命令."""
 
+    # url 与 --file 互斥：同时指定时拒绝，避免静默转录错误媒体
+    if args.file and args.url:
+        print("错误: url 与 --file 不能同时指定（二选一）", file=sys.stderr)
+        sys.exit(1)
+
     # 执行转录：本地文件 → LocalFileSource（仅 Whisper）；否则 → B站 URL
     if args.file:
         try:

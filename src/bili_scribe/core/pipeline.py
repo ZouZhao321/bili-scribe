@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import math
+import sys
 from pathlib import Path
 
 from bili_scribe.core.transcriber import format_transcript, whisper_transcribe
@@ -62,8 +63,12 @@ def transcribe_source(
          "full_text": "...", "subtitles": [...], "lines": N}
         {"success": False, "error": "..."}
     """
-    # 1. 元数据（源自身完成降级处理）
-    meta = source.get_metadata()
+    # 1. 元数据（源自身完成降级处理；异常时兜底默认值，保证恒返回结果字典）
+    meta: dict = {}
+    try:
+        meta = source.get_metadata()
+    except Exception as e:  # noqa: BLE001  # 源实现异常降级为默认元数据，不向上抛
+        print(f"[pipeline] 获取元数据失败，降级默认值: {e}", file=sys.stderr)
     title = meta.get("title") or source.source_id
     duration = meta.get("duration", 0)
 
@@ -79,7 +84,11 @@ def transcribe_source(
     subtitles: list[dict] = []
     src = "whisper"  # 来源标记，字幕命中时改为 subtitle
     if mode != "whisper":
-        fetched = source.get_subtitles()
+        try:
+            fetched = source.get_subtitles()
+        except Exception as e:  # noqa: BLE001  # 源实现异常降级为无字幕，保证恒返回结果字典
+            print(f"[pipeline] 获取字幕失败，降级 Whisper: {e}", file=sys.stderr)
+            fetched = []
         if fetched:
             subtitles = fetched
             src = "subtitle"

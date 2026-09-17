@@ -9,7 +9,8 @@ pipeline 只依赖 MediaSource 协议，不关心源的具体实现。
 | LocalFileSource | 本地视频/音频文件 → 直接转录 |
 """
 
+from bili_scribe.core.sources.base import MediaSource
 from bili_scribe.core.sources.bilibili import BilibiliSource
 from bili_scribe.core.sources.local import LocalFileSource
 
-__all__ = ["BilibiliSource", "LocalFileSource"]
+__all__ = ["BilibiliSource", "LocalFileSource", "MediaSource"]

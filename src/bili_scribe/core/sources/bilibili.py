@@ -135,7 +135,7 @@ class BilibiliSource:
         video_url = get_video_url(self.bvid, cid)
         if not video_url:
             return None
-        video_path = out_path.with_suffix(".flv")
+        video_path = out_path.with_name("video.flv")  # 与原 runner 临时文件名保持一致
         referer = f"https://www.bilibili.com/video/{self.bvid}/"
         if not download_audio(video_url, str(video_path), referer):
             return None
@@ -234,17 +234,20 @@ class BilibiliSource:
         """获取当前分 P 的 CID，失败时记录错误并返回 None（结果缓存）.
 
         get_subtitles() 与 get_audio() 都可能调用，缓存避免重复请求
-        pagelist API。实例的 page 固定，缓存安全。
+        pagelist API（与旧 runner 单次调用一致）。实例的 page 固定，
+        缓存安全；失败结果同样缓存，避免重复请求与 stale state。
 
         返回:
             成功时返回 CID 字符串，失败返回 None。
         """
         if self._cid is not None:
             return self._cid
+        if self._cid_error:  # 失败结果同样缓存（含超时后的重试场景），避免重复请求
+            return None
         try:
             cid, _part_title, _total = get_cid(self.bvid, self.page)
             self._cid = str(cid)
             return self._cid
-        except SystemExit as e:
+        except Exception as e:  # noqa: BLE001  # 与 runner 原行为一致：CID 获取失败转为任务失败返回
             self._cid_error = f"获取 CID 失败: {e}"
             return None

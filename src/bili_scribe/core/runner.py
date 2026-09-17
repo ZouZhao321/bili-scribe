@@ -6,13 +6,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from bili_scribe.core.pipeline import transcribe_source
 from bili_scribe.core.sources.bilibili import BilibiliSource
-
-# 兼容旧引用（历史常量，下游可能 import）
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def run_transcription(
@@ -46,8 +41,9 @@ def run_transcription(
     """
     try:
         source = BilibiliSource(url=url, page=page, cookie=cookie)
-    except SystemExit as e:  # URL 解析失败转为任务失败返回，不向上抛
-        return {"success": False, "error": f"URL 解析失败: {e}"}
+    except (Exception, SystemExit) as e:  # noqa: BLE001  # 构造失败（URL 解析/网络异常）转为任务失败返回，不向上抛
+        # str(e) 对 SystemExit 是退出码（"1"），不含实际原因（已由 extract_bvid 打印 stderr），故用中性文案
+        return {"success": False, "error": f"URL 解析失败: 无法解析出有效的 BV ID（{e}）"}
     return transcribe_source(
         source,
         model=model,
