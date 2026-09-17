@@ -32,8 +32,9 @@ def _build_dir_name(source_id: str, title: str) -> str:
         目录名，如 "BV1xx_demo"。
 
     注:
-        本地文件默认标题与源标识相同（均为文件名），若需单段目录名
-        应由源在 get_metadata() 中提供 dir_name 键，pipeline 优先采用。
+        本函数恒双段拼接；若源需要在特定场景使用单段目录名
+        （如本地文件默认标题），应在 get_metadata() 中提供
+        dir_name 键，pipeline 优先采用源提供的目录名。
     """
     safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
     return f"{source_id}_{safe_title}"
@@ -67,7 +68,7 @@ def transcribe_source(
     meta: dict = {}
     try:
         meta = source.get_metadata()
-    except Exception as e:  # noqa: BLE001  # 源实现异常降级为默认元数据，不向上抛
+    except (Exception, SystemExit) as e:  # noqa: BLE001  # 源实现异常降级为默认元数据，不向上抛（含 SystemExit）
         print(f"[pipeline] 获取元数据失败，降级默认值: {e}", file=sys.stderr)
     title = meta.get("title") or source.source_id
     duration = meta.get("duration", 0)
@@ -86,7 +87,7 @@ def transcribe_source(
     if mode != "whisper":
         try:
             fetched = source.get_subtitles()
-        except Exception as e:  # noqa: BLE001  # 源实现异常降级为无字幕，保证恒返回结果字典
+        except (Exception, SystemExit) as e:  # noqa: BLE001  # 源实现异常降级为无字幕，保证恒返回结果字典（含 SystemExit）
             print(f"[pipeline] 获取字幕失败，降级 Whisper: {e}", file=sys.stderr)
             fetched = []
         if fetched:
@@ -108,7 +109,7 @@ def transcribe_source(
                     else:
                         subtitles = result
                     src = "whisper"
-        except Exception as e:  # noqa: BLE001  # Whisper 转录失败转为任务失败返回
+        except (Exception, SystemExit) as e:  # noqa: BLE001  # Whisper 转录失败转为任务失败返回（含 SystemExit）
             return {"success": False, "error": f"Whisper 转录失败: {e}"}
 
     if not subtitles:

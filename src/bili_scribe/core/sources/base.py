@@ -30,7 +30,9 @@ class MediaSource(Protocol):
 
         返回:
             {"title": str, "author": str, "duration": int(秒),
-             "raw": dict(源原始元数据)}
+             "raw": dict(源原始元数据),
+             "dir_name": str(可选，输出目录名覆盖；缺省时 pipeline
+             拼接 {source_id}_{安全标题})}
         """
         ...
 

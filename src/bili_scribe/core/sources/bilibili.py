@@ -24,6 +24,14 @@ from bili_scribe.core.bilibili import (
 )
 
 
+def _best_effort_unlink(path: Path) -> None:
+    """尽力删除文件，失败仅打日志不抛异常（Windows 文件锁场景）."""
+    try:
+        path.unlink()
+    except OSError as e:
+        print(f"[bilibili] 删除临时文件失败: {e}", file=sys.stderr)
+
+
 class BilibiliSource:
     """B 站视频源 — URL/BV 号 → 字幕、音频与元数据.
 
@@ -69,7 +77,7 @@ class BilibiliSource:
         """
         try:
             self._info = get_video_info(self.bvid)
-        except Exception as e:  # noqa: BLE001  # 信息获取失败降级为默认值，与 runner 原行为一致
+        except (Exception, SystemExit) as e:  # noqa: BLE001  # 信息获取失败降级为默认值，与 runner 原行为一致
             print(f"[bilibili] 获取视频信息失败，降级使用默认标题: {e}", file=sys.stderr)
             self._info = {}
         return {
@@ -104,9 +112,10 @@ class BilibiliSource:
                     body = sub_data.get("body", [])
                     if body:
                         return body
-                except urllib.error.URLError as _e:  # 单个字幕下载失败，继续尝试下一个
+                except (urllib.error.URLError, ValueError, AttributeError) as e:  # 单个字幕条目失败，继续尝试下一个
+                    print(f"[bilibili] 字幕条目下载失败，尝试下一个: {e}", file=sys.stderr)
                     continue
-        except Exception:  # noqa: BLE001, S110  # 字幕获取失败静默降级 Whisper
+        except (Exception, SystemExit):  # noqa: BLE001, S110  # 字幕获取失败静默降级 Whisper（含 SystemExit）
             pass
         return []
 
@@ -159,10 +168,11 @@ class BilibiliSource:
                 capture_output=True,
             )
         except (subprocess.CalledProcessError, OSError) as e:
-            # ffmpeg 缺失或提取失败：符合协议约定返回 None，不向上抛
+            # ffmpeg 缺失或提取失败：符合协议约定返回 None，不向上抛；残留临时文件一并清理
             print(f"[bilibili] ffmpeg 提取音频失败: {e}", file=sys.stderr)
+            _best_effort_unlink(video_path)
             return None
-        video_path.unlink()  # 删除视频文件，保留音频
+        _best_effort_unlink(video_path)  # 删除视频文件，保留音频（清理失败不影响已成功的提取）
         return out_path
 
     def meta_lines(self) -> list[str]:
@@ -248,6 +258,6 @@ class BilibiliSource:
             cid, _part_title, _total = get_cid(self.bvid, self.page)
             self._cid = str(cid)
             return self._cid
-        except Exception as e:  # noqa: BLE001  # 与 runner 原行为一致：CID 获取失败转为任务失败返回
+        except (Exception, SystemExit) as e:  # noqa: BLE001  # 与 runner 原行为一致：CID 获取失败转为任务失败返回
             self._cid_error = f"获取 CID 失败: {e}"
             return None
