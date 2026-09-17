@@ -232,6 +232,8 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
         if not args.url:
             print("错误: 必须提供 url 或 --file", file=sys.stderr)
             sys.exit(1)
+        if args.title or args.author:
+            print("⚠ --title/--author 仅对 --file 生效，URL 转录已忽略", file=sys.stderr)
         result = run_transcription(
             args.url,
             args.model,

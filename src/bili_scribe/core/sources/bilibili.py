@@ -27,7 +27,7 @@ from bili_scribe.core.bilibili import (
 def _best_effort_unlink(path: Path) -> None:
     """尽力删除文件，失败仅打日志不抛异常（Windows 文件锁场景）."""
     try:
-        path.unlink()
+        path.unlink(missing_ok=True)  # 文件不存在时不打误导性日志
     except OSError as e:
         print(f"[bilibili] 删除临时文件失败: {e}", file=sys.stderr)
 
@@ -150,6 +150,7 @@ class BilibiliSource:
             if download_audio(audio_url, str(out_path), referer):
                 return out_path
             self._audio_error = "音频流下载失败: 下载未完成（详见 stderr）"
+            _best_effort_unlink(out_path)  # 清理部分写入的文件，避免残留损坏音频
             return None
 
         # DASH 不可用，回退到 FLV 格式 → ffmpeg 提取音频
@@ -166,6 +167,7 @@ class BilibiliSource:
         referer = f"https://www.bilibili.com/video/{self.bvid}/"
         if not download_audio(video_url, str(video_path), referer):
             self._audio_error = "视频流下载失败: 下载未完成（详见 stderr）"
+            _best_effort_unlink(video_path)  # 清理下载中断残留的部分视频文件
             return None
         if not video_path.exists():
             self._audio_error = "视频流下载后文件缺失"
@@ -197,7 +199,8 @@ class BilibiliSource:
             else:
                 detail_str = ""
             self._audio_error = f"ffmpeg 提取音频失败: {type(e).__name__}"
-            print(f"[bilibili] ffmpeg 提取音频失败: {type(e).__name__}: {detail_str or e}", file=sys.stderr)
+            detail_msg = detail_str if detail_str else str(e)
+            print(f"[bilibili] ffmpeg 提取音频失败: {type(e).__name__}: {detail_msg}", file=sys.stderr)
             _best_effort_unlink(video_path)
             _best_effort_unlink(out_path)  # 清理可能被部分写入的目标文件
             return None
