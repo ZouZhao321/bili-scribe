@@ -119,8 +119,8 @@ class BilibiliSource:
                 except (urllib.error.URLError, ValueError, AttributeError) as e:  # 单个字幕条目失败，继续尝试下一个
                     print(f"[bilibili] 字幕条目下载失败，尝试下一个: {e}", file=sys.stderr)
                     continue
-        except (Exception, SystemExit):  # noqa: BLE001, S110  # 字幕获取失败静默降级 Whisper（含 SystemExit）
-            pass
+        except (Exception, SystemExit) as e:  # noqa: BLE001  # 字幕获取失败静默降级 Whisper（含 SystemExit），打日志便于诊断
+            print(f"[bilibili] 获取字幕列表失败，降级 Whisper: {e}", file=sys.stderr)
         return []
 
     def get_audio(self, out_path: Path) -> Path | None:
@@ -187,8 +187,10 @@ class BilibiliSource:
             )
         except (subprocess.CalledProcessError, OSError) as e:
             # ffmpeg 缺失或提取失败：符合协议约定返回 None，不向上抛；残留临时文件一并清理
+            self._audio_error = f"ffmpeg 提取音频失败: {type(e).__name__}（详见 stderr）"
             print(f"[bilibili] ffmpeg 提取音频失败: {e}", file=sys.stderr)
             _best_effort_unlink(video_path)
+            _best_effort_unlink(out_path)  # 清理可能被部分写入的目标文件
             return None
         _best_effort_unlink(video_path)  # 删除视频文件，保留音频（清理失败不影响已成功的提取）
         return out_path

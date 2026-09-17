@@ -68,7 +68,7 @@ def transcribe_source(
     log_prefix = f"[pipeline:{task_id}] " if task_id else "[pipeline] "
     meta: dict = {}
     try:
-        meta = source.get_metadata()
+        meta = source.get_metadata() or {}  # 容错：源返回 None（而非抛出）时归一化为空 dict
     except (Exception, SystemExit) as e:  # noqa: BLE001  # 源实现异常降级为默认元数据，不向上抛（含 SystemExit）
         print(f"{log_prefix}获取元数据失败，降级默认值: {e}", file=sys.stderr)
     title = meta.get("title") or source.source_id

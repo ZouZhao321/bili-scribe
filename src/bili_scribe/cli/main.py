@@ -224,7 +224,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     if args.file:
         try:
             source = LocalFileSource(args.file, title=args.title, author=args.author)
-        except FileNotFoundError as e:
+        except (OSError, RuntimeError) as e:  # FileNotFoundError/PermissionError/expanduser 失败统一为友好报错
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
         result = transcribe_source(source, model=args.model, language=args.language)
