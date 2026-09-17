@@ -230,6 +230,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
         result = run_transcription(
             args.url,
             args.model,
+            mode="whisper" if args.force_whisper else "auto",
             language=args.language,
             page=args.page,
             cookie=args.cookie,

@@ -48,6 +48,7 @@ class BilibiliSource:
         self.page = page
         self.cookie = cookie
         self._info: dict = {}
+        self._cid: str | None = None
         self._cid_error: str = ""
 
     # ------------------------------------------------------------------
@@ -68,8 +69,8 @@ class BilibiliSource:
         """
         try:
             self._info = get_video_info(self.bvid)
-        except SystemExit as e:
-            print(f"[runner] 获取视频信息失败，降级使用默认标题: {e}", file=sys.stderr)
+        except Exception as e:  # noqa: BLE001  # 信息获取失败降级为默认值，与 runner 原行为一致
+            print(f"[bilibili] 获取视频信息失败，降级使用默认标题: {e}", file=sys.stderr)
             self._info = {}
         return {
             "title": self._info.get("title", self.bvid),
@@ -95,8 +96,11 @@ class BilibiliSource:
             cc_subs = [s for s in sub_list if not s.get("lan", "").startswith("ai")]
             ai_subs = [s for s in sub_list if s.get("lan", "").startswith("ai")]
             for sub in cc_subs + ai_subs:
+                sub_url = sub.get("subtitle_url")
+                if not sub_url:
+                    continue  # 坏条目跳过，不中断后续有效字幕
                 try:
-                    sub_data = download_subtitle_json(sub["subtitle_url"])
+                    sub_data = download_subtitle_json(sub_url)
                     body = sub_data.get("body", [])
                     if body:
                         return body
@@ -137,34 +141,40 @@ class BilibiliSource:
             return None
         if not video_path.exists():
             return None
-        subprocess.run(  # noqa: S603  # 参数来自本地文件路径/可信解析结果
-            [  # noqa: S607  # 固定可执行名，经 PATH 解析
-                "ffmpeg",
-                "-y",
-                "-i",
-                str(video_path),
-                "-vn",
-                "-acodec",
-                "copy",
-                "-f",
-                "mp4",
-                str(out_path),
-            ],
-            check=True,
-            capture_output=True,
-        )
+        try:
+            subprocess.run(  # noqa: S603  # 参数来自本地文件路径/可信解析结果
+                [  # noqa: S607  # 固定可执行名，经 PATH 解析
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(video_path),
+                    "-vn",
+                    "-acodec",
+                    "copy",
+                    "-f",
+                    "mp4",
+                    str(out_path),
+                ],
+                check=True,
+                capture_output=True,
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            # ffmpeg 缺失或提取失败：符合协议约定返回 None，不向上抛
+            print(f"[bilibili] ffmpeg 提取音频失败: {e}", file=sys.stderr)
+            return None
         video_path.unlink()  # 删除视频文件，保留音频
         return out_path
 
     def meta_lines(self) -> list[str]:
         """生成「视频信息.txt」文本行（纯视频元数据，不含转录信息）.
 
+        即使元数据获取失败也返回完整行（默认值兜底），
+        与原 runner 无条件写入「视频信息.txt」的行为一致。
+
         返回:
-            与原 runner 输出逐行一致的文本行列表。
+            与原 runner 输出逐行一致的文本行列表（恒非空）。
         """
         info = self._info
-        if not info:
-            return []
         bvid = self.bvid
         title = info.get("title", bvid)
         duration = info.get("duration", 0)
@@ -221,14 +231,20 @@ class BilibiliSource:
     # ------------------------------------------------------------------
 
     def _get_cid(self) -> str | None:
-        """获取当前分 P 的 CID，失败时记录错误并返回 None.
+        """获取当前分 P 的 CID，失败时记录错误并返回 None（结果缓存）.
+
+        get_subtitles() 与 get_audio() 都可能调用，缓存避免重复请求
+        pagelist API。实例的 page 固定，缓存安全。
 
         返回:
             成功时返回 CID 字符串，失败返回 None。
         """
+        if self._cid is not None:
+            return self._cid
         try:
             cid, _part_title, _total = get_cid(self.bvid, self.page)
-            return str(cid)
+            self._cid = str(cid)
+            return self._cid
         except SystemExit as e:
             self._cid_error = f"获取 CID 失败: {e}"
             return None

@@ -50,13 +50,21 @@ class LocalFileSource:
 
         返回:
             {"title": str, "author": str, "duration": int(秒),
-             "raw": {}}
+             "raw": {}, "dir_name": str(输出目录名)}
         """
+        title = self._title_override or self.path.stem
+        # 目录名：默认标题（与源标识相同）时单段，覆盖标题时双段拼接
+        if self._title_override:
+            safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
+            dir_name = f"{self.path.stem}_{safe_title}"
+        else:
+            dir_name = self.path.stem
         return {
-            "title": self._title_override or self.path.stem,
+            "title": title,
             "author": self._author_override,
             "duration": self._probe_duration(),
             "raw": {},
+            "dir_name": dir_name,
         }
 
     def get_subtitles(self) -> list[dict]:

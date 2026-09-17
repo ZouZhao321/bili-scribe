@@ -19,22 +19,22 @@ from bili_scribe.core.transcriber import format_transcript, whisper_transcribe
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = PROJECT_ROOT / "out"
 
-TIMEOUT = 6 * 3600  # 6 小时
-
 
 def _build_dir_name(source_id: str, title: str) -> str:
-    """构建输出目录名：{源标识}_{安全标题}，标题与源标识相同时退化为单段.
+    """构建输出目录名：恒为 {源标识}_{安全标题}（与原 runner 行为一致）.
 
     参数:
         source_id: 源唯一标识（B站 BV 号 / 本地文件名）.
         title: 视频标题（截断 100 字符，替换路径分隔符）.
 
     返回:
-        目录名，如 "BV1xx_demo" 或 "demo"。
+        目录名，如 "BV1xx_demo"。
+
+    注:
+        本地文件默认标题与源标识相同（均为文件名），若需单段目录名
+        应由源在 get_metadata() 中提供 dir_name 键，pipeline 优先采用。
     """
     safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
-    if safe_title == source_id:
-        return source_id
     return f"{source_id}_{safe_title}"
 
 
@@ -51,7 +51,7 @@ def transcribe_source(
     参数:
         source: 实现 MediaSource 协议的媒体源（B站/本地文件）.
         model: Whisper 模型大小 (tiny/base/small/medium/large-v3).
-        task_id: 任务 ID（仅用于日志上下文）.
+        task_id: 任务 ID（保留兼容签名，当前无日志用途；worker 传入但不消费）.
         mode: 转录模式 (auto/subtitle/whisper/both).
         language: Whisper 语言提示.
         out_dir: 输出根目录（默认仓库 out/）.
@@ -68,7 +68,8 @@ def transcribe_source(
     duration = meta.get("duration", 0)
 
     # 2. 创建输出目录，写入元数据文件
-    video_dir = out_dir / _build_dir_name(source.source_id, title)
+    # 目录名优先采用源提供的 dir_name（本地默认标题时单段），否则恒双段拼接
+    video_dir = out_dir / (meta.get("dir_name") or _build_dir_name(source.source_id, title))
     video_dir.mkdir(parents=True, exist_ok=True)
     meta_lines = source.meta_lines()
     if meta_lines:
@@ -103,7 +104,7 @@ def transcribe_source(
 
     if not subtitles:
         error = getattr(source, "get_error", lambda: "")()
-        return {"success": False, "error": error or "该视频没有可用字幕"}
+        return {"success": False, "error": error or "转录失败: 无可用字幕且 Whisper 未产出结果"}
 
     # 5. 写入文稿
     # 确保字幕也包含置信度字段（默认 0.99）
