@@ -61,6 +61,8 @@ class BilibiliSource:
         self._metadata_loaded: bool = False  # 是否已尝试拉取元数据（区分"未拉取"与"拉取失败"）
         self._cid: str | None = None
         self._cid_error: str = ""
+        self._part_title: str = ""  # 当前分 P 标题（多分 P 时用于目录名）
+        self._total_pages: int = 0  # 总分 P 数（多分 P 时用于目录名）
         self._audio_error: str = ""
 
     # ------------------------------------------------------------------
@@ -86,10 +88,21 @@ class BilibiliSource:
             self._info = {}
         finally:
             self._metadata_loaded = True  # 无论成败都标记已尝试，避免 meta_lines 重复拉取
+
+        title = self._info.get("title", self.bvid)
+        # 分 P 视频输出到独立子目录，避免多分 P 互相覆盖（触发 _get_cid 缓存分 P 信息）
+        self._get_cid()
+        dir_name = None
+        if self._total_pages > 1:
+            safe_title = title[:100].replace("/", "_").replace("\\", "_").replace(" ", "_")
+            part = (self._part_title or f"P{self.page + 1}")[:100]
+            safe_part = part.replace("/", "_").replace("\\", "_").replace(" ", "_")
+            dir_name = f"{self.bvid}_{safe_title}/P{self.page + 1:02d}_{safe_part}"
         return {
-            "title": self._info.get("title", self.bvid),
+            "title": title,
             "author": self._info.get("owner", {}).get("name", ""),
             "duration": self._info.get("duration", 0),
+            "dir_name": dir_name,
             "raw": self._info,
         }
 
@@ -289,8 +302,10 @@ class BilibiliSource:
         if self._cid_error:  # 失败结果同样缓存（含超时后的重试场景），避免重复请求
             return None
         try:
-            cid, _part_title, _total = get_cid(self.bvid, self.page)
+            cid, part_title, total = get_cid(self.bvid, self.page)
             self._cid = str(cid)
+            self._part_title = part_title or ""
+            self._total_pages = total
             return self._cid
         except (Exception, SystemExit) as e:  # noqa: BLE001  # 与 runner 原行为一致：CID 获取失败转为任务失败返回
             self._cid_error = f"获取 CID 失败: {type(e).__name__} {e}（详见 stderr 输出）"

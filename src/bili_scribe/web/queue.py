@@ -128,11 +128,12 @@ class TaskQueue:
             if len(self._tasks) >= self._max_size:
                 return False
 
-            # 去重：同一 BV 只允许一个待处理/处理中的任务
-            bvid = self._extract_bvid(task.url)
-            if bvid:
+            # 去重：同一视频同一分 P 只允许一个待处理/处理中的任务
+            # （不同分 P 可并行，按 (bvid, page) 区分）
+            key = self._extract_task_key(task)
+            if key:
                 for t in self._tasks.values():
-                    if t.status in (TaskStatus.pending, TaskStatus.processing) and self._extract_bvid(t.url) == bvid:
+                    if t.status in (TaskStatus.pending, TaskStatus.processing) and self._extract_task_key(t) == key:
                         return False
 
             self._tasks[task.task_id] = task
@@ -345,19 +346,18 @@ class TaskQueue:
     # ── 辅助方法 ──
 
     @staticmethod
-    def _extract_bvid(url: str) -> str | None:
-        """从 B 站 URL 或纯 ID 字符串中提取 BV ID。
-
-        参数：
-            url: B 站 URL 或 BV ID 字符串。
+    def _extract_task_key(task) -> tuple | None:
+        """从任务中提取去重键：同一视频同一分 P 视为重复。
 
         返回：
-            找到则返回 12 位 BV ID，否则返回 None。
+            (BV ID, 分 P 序号) 元组，无法提取 BV ID 时返回 None。
         """
         import re
 
-        m = re.search(r"(BV[\w]{10})", url)
-        return m.group(1) if m else None
+        m = re.search(r"(BV[\w]{10})", task.url)
+        if not m:
+            return None
+        return (m.group(1), task.page)
 
 
 # 全局单例

@@ -270,12 +270,39 @@ class TestTaskQueue:
         stale = fresh_queue.detect_stale_tasks(timeout=0)
         assert len(stale) == 1  # still only t1 (t2 is pending, not processing)
 
-    def test_extract_bvid(self):
-        """Extract bvid."""
-        assert TaskQueue._extract_bvid("BV1Gm421W75K") == "BV1Gm421W75K"
-        assert TaskQueue._extract_bvid("https://www.bilibili.com/video/BV1Gm421W75K") == "BV1Gm421W75K"
-        assert TaskQueue._extract_bvid("https://b23.tv/xxxxx") is None
-        assert TaskQueue._extract_bvid("hello") is None
+    def test_extract_task_key(self):
+        """Extract dedup key: (bvid, page)."""
+        t1 = Task(task_id="t1", url="BV1Gm421W75K", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t2 = Task(
+            task_id="t2",
+            url="https://www.bilibili.com/video/BV1Gm421W75K?p=2",
+            mode=TranscriptMode.auto,
+            model=WhisperModel.small,
+            page=1,
+        )
+        t3 = Task(task_id="t3", url="https://b23.tv/xxxxx", mode=TranscriptMode.auto, model=WhisperModel.small)
+        t4 = Task(task_id="t4", url="hello", mode=TranscriptMode.auto, model=WhisperModel.small)
+        assert TaskQueue._extract_task_key(t1) == ("BV1Gm421W75K", 0)
+        assert TaskQueue._extract_task_key(t2) == ("BV1Gm421W75K", 1)
+        assert TaskQueue._extract_task_key(t3) is None
+        assert TaskQueue._extract_task_key(t4) is None
+
+    def test_dedup_different_page_allowed(self, fresh_queue):
+        """不同分 P 可并行，不视为重复."""
+        t1 = Task(task_id="t1", url="BV1Gm421W75K", mode=TranscriptMode.auto, model=WhisperModel.small, page=0)
+        t2 = Task(
+            task_id="t2",
+            url="https://www.bilibili.com/video/BV1Gm421W75K?p=2",
+            mode=TranscriptMode.auto,
+            model=WhisperModel.small,
+            page=1,
+        )
+        t3 = Task(task_id="t3", url="BV1Gm421W75K", mode=TranscriptMode.auto, model=WhisperModel.small, page=0)
+        assert fresh_queue.enqueue(t1) is True
+        assert fresh_queue.enqueue(t2) is True  # 不同分 P，允许
+        assert fresh_queue.size() == 2
+        assert fresh_queue.enqueue(t3) is False  # 同分 P，拒绝
+        assert fresh_queue.size() == 2
 
     def test_fifo_order(self, fresh_queue):
         """Tasks should be dequeued in FIFO order."""
