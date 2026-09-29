@@ -33,13 +33,18 @@ services:
     environment:
       - BILI_SCRIBE_OUTPUT_DIR=/app/out
       - BILI_SCRIBE_TASKS_DIR=/app/tasks
+      # 并发转录线程数（默认 1）：每个线程独立加载一份 Whisper 模型，
+      # 内存需求随线程数成倍增长，调大前先按下面的建议值核算限额
+      # - BILI_SCRIBE_WORKERS=1
       # 访问密码（未设置则不启用认证，暴露到公网务必设置！）
       - BILI_SCRIBE_PASSWORD=${BILI_SCRIBE_PASSWORD:-}
       # Whisper 模型缓存目录（可选，默认 ~/.cache/huggingface）
       # - HF_HOME=/app/.cache/huggingface
 
-    # 内存限制（Whisper 转录需要较多内存，根据模型调整）
-    # tiny/base: 1GB, small: 2GB, medium: 4GB, large-v3: 6GB
+    # 内存限制（Whisper 转录需要较多内存）
+    # 单线程建议值：tiny/base 1GB, small 2GB, medium 4GB, large-v3 6GB
+    # 多线程时下限为「BILI_SCRIBE_WORKERS × 单线程建议值」；低于下限时
+    # 容器会被内核 OOM 击杀并反复重启。启动日志会报告限额与可用模型
     deploy:
       resources:
         limits:

@@ -20,6 +20,10 @@ from bili_scribe.web.models import (
 DEFAULT_TASK_TIMEOUT = 6 * 3600
 # 队列最大待处理任务数
 MAX_QUEUE_SIZE = 100
+# 同一任务被强制终止后允许重新开始执行的次数上限
+# 进程被 SIGKILL 终止（例如内核 OOM）时来不及调用 fail()，
+# 任务会在重启后回到 pending 并被再次取出；没有上限就会无限重做
+MAX_TASK_ATTEMPTS = 3
 
 
 @dataclass
@@ -46,6 +50,8 @@ class Task:
     result: dict | None = None
     usage: dict | None = None
     error: str | None = None
+    # 任务被取走开始执行的次数，用于限制强制终止后的重做
+    attempts: int = 0
 
     def __post_init__(self):
         """验证并转换枚举字段，确保始终为枚举实例。
@@ -150,6 +156,7 @@ class TaskQueue:
                 if task.status == TaskStatus.pending:
                     task.status = TaskStatus.processing
                     task.started_at = datetime.now(timezone.utc)
+                    task.attempts += 1
                     task.progress = ProgressInfo(
                         phase=ProgressPhase.fetching_info,
                         percent=5,
@@ -157,6 +164,28 @@ class TaskQueue:
                     )
                     return task
             return None
+
+    def release(self, task_id: str) -> bool:
+        """将已取出但尚未执行的任务退回待处理状态。
+
+        工作者在资源不足时用这个方法放弃已取出的任务，让任务留在
+        队列中等待下一次调度，而不是占用 processing 状态。
+
+        参数：
+            task_id: 要退回的任务的唯一标识符。
+
+        返回：
+            退回成功返回 True，任务不存在或不在处理中返回 False。
+        """
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None or task.status != TaskStatus.processing:
+                return False
+            task.status = TaskStatus.pending
+            task.started_at = None
+            task.attempts = max(0, task.attempts - 1)
+            task.progress = ProgressInfo(phase=ProgressPhase.queued, percent=0, message="等待处理（资源不足）")
+            return True
 
     def peek(self, task_id: str) -> Task | None:
         """通过 ID 获取任务，不修改其状态。

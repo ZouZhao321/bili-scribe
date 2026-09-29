@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from bili_scribe.web.models import (
@@ -16,7 +16,7 @@ from bili_scribe.web.models import (
     TranscriptMode,
     WhisperModel,
 )
-from bili_scribe.web.queue import Task, TaskQueue
+from bili_scribe.web.queue import MAX_TASK_ATTEMPTS, Task, TaskQueue
 
 # 默认存储目录
 DEFAULT_STORAGE_DIR = os.path.expanduser("~/.bilibili-api/tasks")
@@ -62,6 +62,7 @@ def _serialize_task(task: Task) -> dict:
         "result": task.result,
         "usage": task.usage,
         "error": task.error,
+        "attempts": task.attempts,
     }
 
 
@@ -122,6 +123,28 @@ def _deserialize_task(data: dict) -> Task:
         result=data.get("result"),
         usage=data.get("usage"),
         error=data.get("error"),
+        attempts=data.get("attempts", 0),
+    )
+
+
+def _interrupted_reason(attempts: int, oom_killed: bool) -> str:
+    """构造任务被强制终止后进入失败状态的原因描述。
+
+    参数：
+        attempts: 任务被取走执行的累计次数。
+        oom_killed: 上次运行是否被内核 OOM 击杀。
+
+    返回：
+        人类可读的原因描述。
+    """
+    if oom_killed:
+        return (
+            f"任务第 {attempts} 次执行时容器内存不足，进程被内核 OOM 击杀。"
+            "已停止重做，请调大容器内存限额或改用更小的模型后重试"
+        )
+    return (
+        f"任务连续 {attempts} 次执行都被强制终止，进程没有留下错误信息"
+        "（最常见的原因是内存不足被内核 OOM 击杀）。已停止重做，请检查容器内存限额后重试"
     )
 
 
@@ -202,15 +225,20 @@ class TaskStorage:
             print(f"[storage] 删除任务 {task_id} 失败: {e}", file=__import__("sys").stderr)
         return False
 
-    def recover(self, queue: TaskQueue) -> int:
+    def recover(self, queue: TaskQueue, oom_killed: bool = False) -> int:
         """从磁盘加载所有已保存的任务，恢复到队列中。
 
-        已完成和失败的任务加载用于查询。
-        待处理的任务重新入队。
-        处理中的任务重置为待处理，确保安全恢复。
+        已完成和失败的任务加载用于查询，待处理的任务重新入队。
+
+        停留于处理中的任务说明上次运行被强制终止（内核 OOM、容器被普通
+        信号终止等），进程来不及记录失败。这类任务按尝试次数决定去向：
+        未达上限则重置为待处理并保留尝试次数，达到上限则停在失败状态。
+        oom_killed 为真时说明容器记录的 OOM 击杀次数不为 0，中断原因
+        确定是内存不足，因此直接停在失败状态。
 
         参数：
             queue: 要恢复任务的 TaskQueue 实例。
+            oom_killed: 上次运行是否被内核 OOM 击杀。
 
         返回：
             从磁盘恢复的任务数量。
@@ -231,11 +259,23 @@ class TaskStorage:
             if task is None:
                 continue
 
-            # 将处理中的任务重置为待处理，确保安全恢复
+            # 处理中的任务说明上次执行被强制终止
             if task.status == TaskStatus.processing:
-                task.status = TaskStatus.pending
                 task.started_at = None
-                task.progress = ProgressInfo(phase=ProgressPhase.queued, percent=0, message="等待处理（重启恢复）")
+                if oom_killed or task.attempts >= MAX_TASK_ATTEMPTS:
+                    task.status = TaskStatus.failed
+                    task.completed_at = datetime.now(timezone.utc)
+                    task.error = _interrupted_reason(task.attempts, oom_killed)
+                    task.progress = ProgressInfo(phase=ProgressPhase.failed, percent=0, message=task.error)
+                else:
+                    task.status = TaskStatus.pending
+                    task.progress = ProgressInfo(
+                        phase=ProgressPhase.queued,
+                        percent=0,
+                        message=f"等待处理（重启恢复，已执行 {task.attempts} 次）",
+                    )
+                # 恢复结果写回磁盘，否则下次重启会基于过期状态重新判定
+                self.save(task)
 
             # 重新添加到队列（如果存在则覆盖）
             existing = queue.peek(task_id)
