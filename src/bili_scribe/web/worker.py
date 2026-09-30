@@ -285,10 +285,9 @@ class Worker:
         self._cpu_threshold = cpu_threshold
         self._threads: list[threading.Thread] = []
         self._running = False
-        # 并发线程已通过资源检查、即将加载模型的内存累计（MB）
-        self._reserved_mb = 0
-        # 最近一次资源检查看到的可用内存，用于识别模型占用何时反映到 cgroup 用量
-        self._last_avail: int | None = None
+        # 各线程已通过资源检查、正在加载或执行任务的模型内存
+        # 线程标识 → (登记时的可用内存, 预留量)
+        self._reservations: dict[int, tuple[int, int]] = {}
         self._reserve_lock = threading.Lock()
 
     def start(self) -> None:
@@ -329,10 +328,11 @@ class Worker:
     def _check_resources(self, model: str) -> tuple[bool, str]:
         """检查 CPU 和内存是否满足任务执行条件，并在通过时登记内存预留.
 
-        可用内存取自 cgroup 的当前用量，其中已经包含其他线程加载完成的模型。
-        预留只用于覆盖「判定通过到模型占用反映到 cgroup 用量」这段窗口，
-        因此观察到可用内存因为模型加载而下降时清空预留计数，避免同一份
-        模型同时出现在用量和预留两处。
+        可用内存取自 cgroup 的当前用量，其中已经包含其他线程加载完成的模型，
+        因此预留只用于覆盖「判定通过到模型占用反映到 cgroup 用量」这段窗口。
+        预留按线程分别记账：一个线程只会撤销自己那份，且只在自己登记的预留
+        量已经有相应幅度的内存下降时才撤销，避免同一份模型同时出现在用量和
+        预留两处。
 
         参数：
             model: Whisper 模型名称（用于内存需求计算）
@@ -347,29 +347,28 @@ class Worker:
         mem_required = MODEL_MEMORY_REQUIREMENTS.get(model, DEFAULT_MODEL_MEMORY_MB)
         mem_needed = int(mem_required * MEMORY_THRESHOLD)
         mem_avail = get_available_memory_mb()
+        ident = threading.get_ident()
         with self._reserve_lock:
-            if self._last_avail is not None and self._last_avail - mem_avail >= DEFAULT_MODEL_MEMORY_MB:
-                self._reserved_mb = 0
-            self._last_avail = mem_avail
+            # 本线程上次登记的预留如果已经反映到 cgroup 用量，先撤销
+            recorded = self._reservations.get(ident)
+            if recorded is not None and recorded[0] - mem_avail >= recorded[1] // 2:
+                del self._reservations[ident]
 
-            remaining = mem_avail - self._reserved_mb
+            reserved = sum(amount for _, amount in self._reservations.values())
+            remaining = mem_avail - reserved
             if remaining < mem_needed:
                 return False, (
-                    f"内存不足: 可用 {mem_avail}MB，已被并发线程预留 {self._reserved_mb}MB，"
+                    f"内存不足: 可用 {mem_avail}MB，已被并发线程预留 {reserved}MB，"
                     f"剩余 {remaining}MB < 需要 {mem_needed}MB (模型 {model})"
                 )
-            self._reserved_mb += mem_needed
+            self._reservations[ident] = (mem_avail, mem_needed)
         return True, ""
 
-    def _release_memory(self, model: str) -> None:
-        """释放在 _check_resources 中登记的模型内存预留.
-
-        参数：
-            model: 任务使用的 Whisper 模型名称
-        """
-        mem_required = MODEL_MEMORY_REQUIREMENTS.get(model, DEFAULT_MODEL_MEMORY_MB)
+    def _release_memory(self) -> None:
+        """释放本线程在 _check_resources 中登记的模型内存预留."""
+        ident = threading.get_ident()
         with self._reserve_lock:
-            self._reserved_mb = max(0, self._reserved_mb - int(mem_required * MEMORY_THRESHOLD))
+            self._reservations.pop(ident, None)
 
     def _run(self) -> None:
         """主工作循环 — 轮询队列并处理任务。
@@ -424,7 +423,7 @@ class Worker:
                     # 如果配置了 webhook，则触发
                     _fire_webhook(task_id)
                 finally:
-                    self._release_memory(model)
+                    self._release_memory()
 
             except Exception as e:  # noqa: BLE001
                 print(f"[worker] 意外错误: {e}", file=sys.stderr)

@@ -203,7 +203,7 @@ def test_release_returns_memory_to_the_pool(monkeypatch):
     assert w._check_resources("medium")[0] is True
     assert w._check_resources("medium")[0] is False
 
-    w._release_memory("medium")
+    w._release_memory()
     assert w._check_resources("medium")[0] is True
 
 
@@ -221,9 +221,46 @@ def test_reservation_cleared_once_usage_reflects_loading(monkeypatch):
     w = worker_module.Worker(num_workers=2)
     assert w._check_resources("medium")[0] is True
 
-    # 另一线程的模型加载完成，cgroup 用量上升导致可用内存下降
+    # 模型加载完成，cgroup 用量上升导致可用内存下降
     avail["now"] = 5000
     assert w._check_resources("medium")[0] is True
+
+
+def test_small_model_reservation_is_also_released(monkeypatch):
+    """小模型的预留同样要在其占用反映到用量后撤销，不能等到任务结束。"""
+    from bili_scribe.web import worker as worker_module
+
+    avail = {"now": 3000}
+    monkeypatch.setattr(worker_module, "get_available_memory_mb", lambda: avail["now"])
+    monkeypatch.setattr(worker_module, "get_cpu_usage", lambda: 0)
+
+    w = worker_module.Worker(num_workers=2)
+    assert w._check_resources("small")[0] is True
+
+    # small 的预留是 1800MB，用量下降 900MB 就足以认定它已加载
+    avail["now"] = 2100
+    assert w._check_resources("small")[0] is True
+
+
+def test_one_thread_does_not_drop_another_reservation(monkeypatch):
+    """一个线程撤销自己预留时，不得连带撤销其他线程正在保护的预留。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from bili_scribe.web import worker as worker_module
+
+    avail = {"now": 9000}
+    monkeypatch.setattr(worker_module, "get_available_memory_mb", lambda: avail["now"])
+    monkeypatch.setattr(worker_module, "get_cpu_usage", lambda: 0)
+
+    w = worker_module.Worker(num_workers=2)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        assert pool.submit(w._check_resources, "medium").result()[0] is True
+
+    # 那个线程的模型占用尚未反映到 cgroup 用量，它登记的预留必须继续生效
+    avail["now"] = 5000
+    ok, reason = w._check_resources("medium")
+    assert ok is False
+    assert "预留" in reason
 
 
 def test_memory_budget_report_lists_infeasible_models(monkeypatch, capsys):
