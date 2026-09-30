@@ -1,6 +1,6 @@
 """issue 49：OOM 循环的三道防线。
 
-1. recover() 的尝试次数上限与 OOM 击杀判定（test_issue49_oom_restart_loop.py 覆盖循环本身）
+1. recover() 的尝试次数上限（test_issue49_oom_restart_loop.py 覆盖循环本身）
 2. 可用内存以容器 cgroup 限额为准，而不是 /proc/meminfo
 3. 并发线程共享内存预留，避免各自读到同一份「资源充足」的结论
 """
@@ -14,7 +14,7 @@ from bili_scribe.web.models import (
     TranscriptMode,
     WhisperModel,
 )
-from bili_scribe.web.queue import Task, TaskQueue
+from bili_scribe.web.queue import MAX_TASK_ATTEMPTS, Task, TaskQueue
 from bili_scribe.web.storage import TaskStorage
 
 GIB = 1024 * 1024 * 1024
@@ -32,11 +32,15 @@ def _make_task(task_id: str = "mem_guard_001") -> Task:
     )
 
 
-# ── 1. OOM 击杀判定 ──
+# ── 1. 尝试次数上限 ──
 
 
-def test_recover_marks_failed_when_oom_killed(temp_storage_dir):
-    """容器记录过 OOM 击杀时，被中断的任务直接停在终态，不再重做。"""
+def test_oom_killed_does_not_skip_retry_budget(temp_storage_dir):
+    """容器 cgroup 记录到 OOM 击杀，不能让未达上限的任务提前停止。
+
+    oom_kill 是容器生命周期内的累计值，重启不会重置，它无法说明本次中断
+    是否由 OOM 造成。
+    """
     store = TaskStorage(temp_storage_dir)
 
     q = TaskQueue()
@@ -46,6 +50,7 @@ def test_recover_marks_failed_when_oom_killed(temp_storage_dir):
 
     picked = q.dequeue()
     assert picked is not None
+    assert picked.attempts == 1
     store.save(picked)
 
     restarted = TaskQueue()
@@ -53,8 +58,31 @@ def test_recover_marks_failed_when_oom_killed(temp_storage_dir):
 
     final = restarted.peek(task.task_id)
     assert final is not None
+    assert final.status == TaskStatus.pending
+    assert final.attempts == 1
+
+
+def test_oom_killed_is_mentioned_when_attempts_exhausted(temp_storage_dir):
+    """达到次数上限后，容器记录的 OOM 击杀体现在失败原因里。"""
+    store = TaskStorage(temp_storage_dir)
+
+    q = TaskQueue()
+    task = _make_task("mem_guard_oom_exhausted")
+    assert q.enqueue(task)
+    store.save(task)
+
+    for _ in range(MAX_TASK_ATTEMPTS):
+        picked = q.dequeue()
+        assert picked is not None
+        store.save(picked)
+        q = TaskQueue()
+        store.recover(q, oom_killed=True)
+
+    final = q.peek("mem_guard_oom_exhausted")
+    assert final is not None
     assert final.status == TaskStatus.failed
     assert final.completed_at is not None
+    assert final.error is not None
     assert "OOM" in final.error
 
 
@@ -179,6 +207,25 @@ def test_release_returns_memory_to_the_pool(monkeypatch):
     assert w._check_resources("medium")[0] is True
 
 
+def test_reservation_cleared_once_usage_reflects_loading(monkeypatch):
+    """模型占用已经反映到 cgroup 用量之后，预留不得再重复扣除。
+
+    可用内存由限额减去 cgroup 用量得到，这份用量里已经包含加载完成的模型。
+    """
+    from bili_scribe.web import worker as worker_module
+
+    avail = {"now": 9000}
+    monkeypatch.setattr(worker_module, "get_available_memory_mb", lambda: avail["now"])
+    monkeypatch.setattr(worker_module, "get_cpu_usage", lambda: 0)
+
+    w = worker_module.Worker(num_workers=2)
+    assert w._check_resources("medium")[0] is True
+
+    # 另一线程的模型加载完成，cgroup 用量上升导致可用内存下降
+    avail["now"] = 5000
+    assert w._check_resources("medium")[0] is True
+
+
 def test_memory_budget_report_lists_infeasible_models(monkeypatch, capsys):
     """启动报告必须点出在当前并发配置下必然超限的模型。"""
     from bili_scribe.web import worker as worker_module
@@ -239,35 +286,50 @@ def test_release_returns_task_to_pending_without_burning_attempts():
 # ── 5. 服务启动的完整恢复链路 ──
 
 
-def test_server_startup_stops_oom_loop(tmp_path, monkeypatch):
-    """服务在 OOM 击杀后重启时，被中断的任务停在失败状态，不会被再次取走。"""
+def test_recover_persists_decision_to_disk(temp_storage_dir):
+    """恢复的判定结果必须写回磁盘，否则下次重启会基于过期状态重新判定。"""
+    store = TaskStorage(temp_storage_dir)
+
+    q = TaskQueue()
+    task = _make_task("mem_guard_persist")
+    assert q.enqueue(task)
+    store.save(task)
+
+    picked = q.dequeue()
+    assert picked is not None
+    store.save(picked)
+
+    restarted = TaskQueue()
+    store.recover(restarted)
+
+    on_disk = store.load("mem_guard_persist")
+    assert on_disk is not None
+    assert on_disk.status == TaskStatus.pending
+    assert on_disk.started_at is None
+
+
+# ── 5. 服务启动的恢复链路 ──
+
+
+def test_server_passes_oom_state_to_recover(monkeypatch):
+    """启动恢复时把容器 cgroup 记录的 OOM 击杀状态交给 recover。"""
     from fastapi.testclient import TestClient
 
     from bili_scribe.web import server as server_module
-    from bili_scribe.web.queue import queue
     from bili_scribe.web.server import app
-    from bili_scribe.web.storage import storage
 
-    monkeypatch.setattr(storage, "_dir", str(tmp_path))
-    with queue._lock:
-        queue._tasks.clear()
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(server_module, "get_oom_kill_count", lambda: 5)
 
-    # 磁盘上留下被 OOM 击杀时正在处理的任务
-    store = TaskStorage(str(tmp_path))
-    interrupted = _make_task("startup_oom_001")
-    interrupted.status = TaskStatus.processing
-    interrupted.attempts = 1
-    store.save(interrupted)
+    def fake_recover(queue, oom_killed=False):
+        seen["oom_killed"] = oom_killed
+        return 0
 
-    # 容器 cgroup 记录过一次 OOM 击杀
-    monkeypatch.setattr(server_module, "get_oom_kill_count", lambda: 1)
+    monkeypatch.setattr(server_module.storage, "recover", fake_recover)
+    monkeypatch.setattr(server_module.worker, "start", lambda: None)
+    monkeypatch.setattr(server_module.worker, "stop", lambda: None)
 
     with TestClient(app):
-        final = queue.peek("startup_oom_001")
-        assert final is not None
-        assert final.status == TaskStatus.failed
-        assert final.error is not None
-        assert "OOM" in final.error
-        on_disk = store.load("startup_oom_001")
-        assert on_disk is not None
-        assert on_disk.status == TaskStatus.failed
+        pass
+
+    assert seen["oom_killed"] is True

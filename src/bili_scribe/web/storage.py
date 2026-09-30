@@ -132,14 +132,15 @@ def _interrupted_reason(attempts: int, oom_killed: bool) -> str:
 
     参数：
         attempts: 任务被取走执行的累计次数。
-        oom_killed: 上次运行是否被内核 OOM 击杀。
+        oom_killed: 容器 cgroup 是否记录到内核 OOM 击杀。
 
     返回：
         人类可读的原因描述。
     """
     if oom_killed:
         return (
-            f"任务第 {attempts} 次执行时容器内存不足，进程被内核 OOM 击杀。"
+            f"任务连续 {attempts} 次执行都被强制终止，进程没有留下错误信息；"
+            "容器 cgroup 记录到内核 OOM 击杀，内存不足是最常见的原因。"
             "已停止重做，请调大容器内存限额或改用更小的模型后重试"
         )
     return (
@@ -233,12 +234,11 @@ class TaskStorage:
         停留于处理中的任务说明上次运行被强制终止（内核 OOM、容器被普通
         信号终止等），进程来不及记录失败。这类任务按尝试次数决定去向：
         未达上限则重置为待处理并保留尝试次数，达到上限则停在失败状态。
-        oom_killed 为真时说明容器记录的 OOM 击杀次数不为 0，中断原因
-        确定是内存不足，因此直接停在失败状态。
+        oom_killed 只用于丰富失败原因的描述，不改变是否重做的判定。
 
         参数：
             queue: 要恢复任务的 TaskQueue 实例。
-            oom_killed: 上次运行是否被内核 OOM 击杀。
+            oom_killed: 容器 cgroup 是否记录到内核 OOM 击杀。
 
         返回：
             从磁盘恢复的任务数量。
@@ -262,7 +262,7 @@ class TaskStorage:
             # 处理中的任务说明上次执行被强制终止
             if task.status == TaskStatus.processing:
                 task.started_at = None
-                if oom_killed or task.attempts >= MAX_TASK_ATTEMPTS:
+                if task.attempts >= MAX_TASK_ATTEMPTS:
                     task.status = TaskStatus.failed
                     task.completed_at = datetime.now(timezone.utc)
                     task.error = _interrupted_reason(task.attempts, oom_killed)

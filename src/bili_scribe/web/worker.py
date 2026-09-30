@@ -287,6 +287,8 @@ class Worker:
         self._running = False
         # 并发线程已通过资源检查、即将加载模型的内存累计（MB）
         self._reserved_mb = 0
+        # 最近一次资源检查看到的可用内存，用于识别模型占用何时反映到 cgroup 用量
+        self._last_avail: int | None = None
         self._reserve_lock = threading.Lock()
 
     def start(self) -> None:
@@ -327,9 +329,10 @@ class Worker:
     def _check_resources(self, model: str) -> tuple[bool, str]:
         """检查 CPU 和内存是否满足任务执行条件，并在通过时登记内存预留.
 
-        并发线程共享一个预留计数：先通过判定的线程把即将加载的模型内存
-        登记进去，后判定的线程看到的可用内存相应减少，避免多个线程各自
-        读到同一份「资源充足」的结论后同时加载模型。
+        可用内存取自 cgroup 的当前用量，其中已经包含其他线程加载完成的模型。
+        预留只用于覆盖「判定通过到模型占用反映到 cgroup 用量」这段窗口，
+        因此观察到可用内存因为模型加载而下降时清空预留计数，避免同一份
+        模型同时出现在用量和预留两处。
 
         参数：
             model: Whisper 模型名称（用于内存需求计算）
@@ -345,6 +348,10 @@ class Worker:
         mem_needed = int(mem_required * MEMORY_THRESHOLD)
         mem_avail = get_available_memory_mb()
         with self._reserve_lock:
+            if self._last_avail is not None and self._last_avail - mem_avail >= DEFAULT_MODEL_MEMORY_MB:
+                self._reserved_mb = 0
+            self._last_avail = mem_avail
+
             remaining = mem_avail - self._reserved_mb
             if remaining < mem_needed:
                 return False, (
