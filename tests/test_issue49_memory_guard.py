@@ -133,6 +133,18 @@ def test_oom_kill_count_zero_without_cgroup(tmp_path, monkeypatch):
     assert queue_store.get_oom_kill_count() == 0
 
 
+def test_oom_kill_zero_in_v2_does_not_fall_back(tmp_path, monkeypatch):
+    """cgroup v2 明确读到 0 时不得回退去读 v1 的历史值。"""
+    v2_events = tmp_path / "memory.events"
+    v2_events.write_text("low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n")
+    v1_events = tmp_path / "memory.oom_control"
+    v1_events.write_text("oom_kill_disable 0\nunder_oom 0\noom_kill 7\n")
+    monkeypatch.setattr(queue_store, "CGROUP_V2_EVENTS", str(v2_events))
+    monkeypatch.setattr(queue_store, "CGROUP_V1_EVENTS", str(v1_events))
+
+    assert queue_store.get_oom_kill_count() == 0
+
+
 # ── 3. 并发线程共享内存预留 ──
 
 

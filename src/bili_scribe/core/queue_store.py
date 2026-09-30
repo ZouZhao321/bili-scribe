@@ -271,7 +271,7 @@ def _read_int_file(path: str) -> int | None:
         return None
 
 
-def _read_cgroup_event(path: str, key: str) -> int:
+def _read_cgroup_event(path: str, key: str) -> int | None:
     """从 cgroup 计数文件中读取指定字段.
 
     参数：
@@ -279,21 +279,22 @@ def _read_cgroup_event(path: str, key: str) -> int:
         key: 字段名称，如 "oom_kill".
 
     返回：
-        字段数值，文件不存在或字段缺失时返回 0.
+        字段数值；文件不存在、字段缺失或无法解析时返回 None.
+        读到 0 与无法读取是两种不同结果，调用方需要区分.
     """
     try:
         with open(path) as f:
             lines = f.readlines()
     except OSError:
-        return 0
+        return None
     for line in lines:
         fields = line.split()
         if len(fields) == 2 and fields[0] == key:
             try:
                 return int(fields[1])
             except ValueError:
-                return 0
-    return 0
+                return None
+    return None
 
 
 def get_cgroup_memory_limit_mb() -> int | None:
@@ -333,9 +334,10 @@ def get_oom_kill_count() -> int:
         累计击杀次数；不在容器内运行或无法读取时返回 0.
     """
     count = _read_cgroup_event(CGROUP_V2_EVENTS, "oom_kill")
-    if count:
+    if count is not None:
         return count
-    return _read_cgroup_event(CGROUP_V1_EVENTS, "oom_kill")
+    count = _read_cgroup_event(CGROUP_V1_EVENTS, "oom_kill")
+    return count if count is not None else 0
 
 
 def get_available_memory_mb() -> int:
