@@ -242,8 +242,29 @@ def test_small_model_reservation_is_also_released(monkeypatch):
     assert w._check_resources("small")[0] is True
 
 
-def test_one_thread_does_not_drop_another_reservation(monkeypatch):
-    """一个线程撤销自己预留时，不得连带撤销其他线程正在保护的预留。"""
+def test_other_threads_pending_reservation_still_protects(monkeypatch):
+    """另一个线程的预留，在它的模型尚未反映到用量时必须继续生效。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from bili_scribe.web import worker as worker_module
+
+    monkeypatch.setattr(worker_module, "get_available_memory_mb", lambda: 4000)
+    monkeypatch.setattr(worker_module, "get_cpu_usage", lambda: 0)
+
+    w = worker_module.Worker(num_workers=2)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        assert pool.submit(w._check_resources, "medium").result()[0] is True
+
+    ok, reason = w._check_resources("medium")
+    assert ok is False
+    assert "预留" in reason
+
+
+def test_reservation_released_when_another_thread_observes_usage(monkeypatch):
+    """撤销预留由观察到用量下降的线程完成，不要求预留持有者自己再来判定。
+
+    持有的线程一旦进入任务执行就不会再回到判定点。
+    """
     from concurrent.futures import ThreadPoolExecutor
 
     from bili_scribe.web import worker as worker_module
@@ -256,11 +277,11 @@ def test_one_thread_does_not_drop_another_reservation(monkeypatch):
     with ThreadPoolExecutor(max_workers=1) as pool:
         assert pool.submit(w._check_resources, "medium").result()[0] is True
 
-    # 那个线程的模型占用尚未反映到 cgroup 用量，它登记的预留必须继续生效
+    # 那个线程的模型已经加载完成，cgroup 用量上升
     avail["now"] = 5000
-    ok, reason = w._check_resources("medium")
-    assert ok is False
-    assert "预留" in reason
+    ok, _ = w._check_resources("medium")
+
+    assert ok is True
 
 
 def test_memory_budget_report_lists_infeasible_models(monkeypatch, capsys):

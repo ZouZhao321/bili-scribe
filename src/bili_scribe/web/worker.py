@@ -330,9 +330,8 @@ class Worker:
 
         可用内存取自 cgroup 的当前用量，其中已经包含其他线程加载完成的模型，
         因此预留只用于覆盖「判定通过到模型占用反映到 cgroup 用量」这段窗口。
-        预留按线程分别记账：一个线程只会撤销自己那份，且只在自己登记的预留
-        量已经有相应幅度的内存下降时才撤销，避免同一份模型同时出现在用量和
-        预留两处。
+        每次判定都会撤销那些可用内存已经相应下降的预留条目，避免同一份模型
+        同时出现在用量和预留两处。
 
         参数：
             model: Whisper 模型名称（用于内存需求计算）
@@ -349,10 +348,12 @@ class Worker:
         mem_avail = get_available_memory_mb()
         ident = threading.get_ident()
         with self._reserve_lock:
-            # 本线程上次登记的预留如果已经反映到 cgroup 用量，先撤销
-            recorded = self._reservations.get(ident)
-            if recorded is not None and recorded[0] - mem_avail >= recorded[1] // 2:
-                del self._reservations[ident]
+            # 撤销已经反映到 cgroup 用量的预留：可用内存的下降幅度达到该条预留量的一半。
+            # 撤销由任何线程的判定触发，不限于预留的持有者——持有者在任务执行期间
+            # 不会再回到判定点。
+            for owner, (recorded_avail, amount) in list(self._reservations.items()):
+                if recorded_avail - mem_avail >= amount // 2:
+                    del self._reservations[owner]
 
             reserved = sum(amount for _, amount in self._reservations.values())
             remaining = mem_avail - reserved
