@@ -1,0 +1,25 @@
+name: 功能请求
+description: 用户缺什么能力，先进 spec 池评估，不直接开工
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 动机
+      description: 用户实际场景中缺什么、现状痛点
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 谁在什么情况下需要，举具体例子
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收草案
+      description: 理想情况下如何证明功能可用（后续升格为 spec 的 DoD 基础）
+    validations:
+      required: true

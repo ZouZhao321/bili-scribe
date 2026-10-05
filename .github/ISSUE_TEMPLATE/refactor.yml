@@ -1,0 +1,31 @@
+name: 重构
+description: 行为不变的结构调整，可独立合入、独立回滚
+labels: [enhancement, ready-for-agent]
+body:
+  - type: textarea
+    id: current
+    attributes:
+      label: 现状问题
+      description: 当前结构哪里不合理，依据是什么
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: 目标结构
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: 边界
+      description: 明确不做什么（不混入行为变更）
+    validations:
+      required: true
+  - type: textarea
+    id: verify
+    attributes:
+      label: 验证方式
+      description: 重构后行为不变如何证明（测试/对比）
+    validations:
+      required: true

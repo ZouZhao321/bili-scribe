@@ -1,0 +1,41 @@
+name: Bug 报告
+description: 复现路径明确的缺陷
+labels: [bug, needs-triage]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: 实际现象
+      description: 可观察的行为，含错误信息/截图/日志
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 依据是什么（需求文档/历史行为/常识）
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 编号列出，从干净状态开始
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 严重度
+      options:
+        - 阻塞（主流程不可用）
+        - 严重（功能错误，有绕过方案）
+        - 轻微（体验/边界问题）
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 环境/版本
+    validations:
+      required: true

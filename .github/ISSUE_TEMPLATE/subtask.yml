@@ -1,0 +1,33 @@
+name: 子任务
+description: 可被单个 agent 会话独立完成的最小单元
+labels: [enhancement, ready-for-agent]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 完成定义（DoD）
+      description: 可验证的验收标准，逐条列出
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: 边界
+      description: 明确不做什么（防止 agent 自由发挥）
+    validations:
+      required: true
+  - type: textarea
+    id: constraint
+    attributes:
+      label: 技术约束
+      description: 必须遵循的模式/禁止触碰的文件/关联 spec 章节
+  - type: textarea
+    id: verify
+    attributes:
+      label: 验证方式
+      description: 跑什么测试/什么命令能证明完成
+    validations:
+      required: true
