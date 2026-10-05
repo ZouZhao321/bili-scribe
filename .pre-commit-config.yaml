@@ -1,0 +1,28 @@
+# 提交前自动检查：ruff 代码检查（自动修复）、ruff 格式化、pytest 测试、提交信息格式校验
+# 安装：pre-commit install（default_install_hook_types 会同时装好 pre-commit 与 commit-msg）
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run --no-sync pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: commit-msg-format
+        name: 提交信息格式检查
+        entry: uv run --no-sync python script/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
