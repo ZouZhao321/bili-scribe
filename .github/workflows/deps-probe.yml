@@ -1,0 +1,61 @@
+# 上游依赖探测：每周按最新上游版本重解析依赖并跑用例，失败时开 issue。
+# 不进入 PR 门禁：结果取决于上游发布时间，不适合阻断合并。
+name: deps-probe
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  latest-upstream:
+    name: latest-upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: 按最新上游重解析并安装
+        run: |
+          uv lock --upgrade
+          uv sync --dev
+      - name: PyAV 与 faster-whisper 的参数兼容性
+        run: |
+          uv run --no-sync python - <<'PY'
+          import inspect
+          import re
+          import sys
+
+          import av
+          from faster_whisper import audio as fw_audio
+
+          used = "metadata_errors" in inspect.getsource(fw_audio)
+          try:
+              accepts = "metadata_errors" in inspect.signature(av.open).parameters
+          except (TypeError, ValueError):
+              # av.open 可能没有可取用的签名，退回版本判断（PyAV 19 移除了该参数）
+              accepts = int(re.split(r"[.\-+]", av.__version__)[0]) < 19
+          print(f"av={av.__version__} faster-whisper 传该参数={used} av.open 接受={accepts}")
+          sys.exit(1 if used and not accepts else 0)
+          PY
+      - name: 导入冒烟
+        run: uv run --no-sync python -c "import bili_scribe; import bili_scribe.web.server; print('imports ok')"
+      - name: pytest
+        run: uv run --no-sync pytest -q
+      - name: 失败时开 issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh issue list --state open --search '上游依赖组合不可用 in:title' --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh issue create \
+              --title "deps-probe: 上游依赖组合不可用" \
+              --body "每周依赖探测失败，运行记录：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
