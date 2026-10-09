@@ -1,0 +1,49 @@
+# 两件事，对应两个 job：
+#
+# 1) 新 issue：表单没带状态角色时补 needs-triage。表单自带状态角色的（「重构请求」与
+#    「工作切片」带 ready-for-agent）跳过，避免一条 issue 上出现两个状态角色。
+# 2) 每天 01:00 UTC 调 script/sync-missing-labels.sh，给缺 kind/* 或 priority/* 的
+#    开启 issue 补 needs-kind / needs-priority，已经有值的摘掉。
+#
+# 两个 job 用 if 按触发事件分工：issues 事件只跑第一个，定时与手动触发只跑第二个。
+name: triage
+
+on:
+  issues:
+    types: [opened]
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  # 新 issue：表单没带状态角色时才补待评估标志，避免出现两个状态角色
+  needs-triage:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          labels=" $(gh issue view ${{ github.event.issue.number }} --json labels --jq '[.labels[].name] | join(" ")') "
+          for state in needs-triage needs-info ready-for-agent ready-for-human wontfix; do
+            case "$labels" in
+              *" $state "*) echo "已有状态角色 $state，不补 needs-triage"; exit 0 ;;
+            esac
+          done
+          gh issue edit ${{ github.event.issue.number }} --add-label needs-triage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+  # 定时把缺维度的标志标签补齐，有值就摘掉
+  missing-dimensions:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash script/sync-missing-labels.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

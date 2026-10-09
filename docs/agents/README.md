@@ -10,3 +10,4 @@
 | `memory.md` | 内存管理、mmap、Swap、卡死分析 | 需要排查 Whisper 内存/卡死问题时 |
 | `scheduling.md` | 调度策略、CPU 感知、内存需求 | 需要了解队列调度规则或模型内存需求时 |
 | `output.md` | 输出目录、out、文件结构 | 需要了解转录结果存放位置时 |
+| `triage-labels.md` | 标签体系、triage、issue 分类、优先级 | 需要判定 issue/PR 该有哪些标签时 |

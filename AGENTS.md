@@ -106,5 +106,6 @@
 | 输出目录、out、文件结构 | `docs/agents/output.md` | 转录结果存放位置 |
 | 内存管理、mmap、Swap、卡死分析 | `docs/agents/memory.md` | Whisper 内存排查 |
 | 并行开发、worktree、隔离 | `docs/agents/worktree.md` | Git worktree 并行开发规范 |
+| 标签体系、triage、issue 分类、优先级 | `docs/agents/triage-labels.md` | 标签名称与组合规则 |
 | ADR、架构决策、决策记录、技术选型 | `docs/adr/README.md` | 架构决策记录 |
 | 会话记忆、历史决策、排查记录 | `.pi/memory/README.md` | 历史记忆 |

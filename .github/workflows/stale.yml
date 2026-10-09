@@ -1,0 +1,55 @@
+# 长期无活动的条目标记与关闭：issue 60 天打 stale、再过 7 天关闭；PR 是 14 天与 7 天。
+#
+# 豁免：带 frozen 的条目，以及带 kind/epic 的 issue（epic 是跟踪容器，本来就不该被
+# 自动关掉，所以它不必再加 frozen）。
+#
+# 关闭理由统一是 not planned。要区分「判定不做」与「长期无活动」，看标签：前者带
+# wontfix，后者带 stale。
+#
+# 已经带 stale 的条目被补上 frozen 时，remove-stale-when-updated 默认开启，会在下一次
+# 运行把 stale 摘掉。
+name: stale
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v11
+        with:
+          # issue：60 天没活动打标记，再过 7 天关闭
+          days-before-issue-stale: 60
+          days-before-issue-close: 7
+          # PR：14 天没活动打标记，再过 7 天关闭
+          days-before-pr-stale: 14
+          days-before-pr-close: 7
+
+          stale-issue-label: stale
+          stale-pr-label: stale
+
+          # frozen 表示长期保留；epic 是跟踪容器，不参与过期
+          exempt-issue-labels: frozen,kind/epic
+          exempt-pr-labels: frozen
+
+          close-issue-reason: not_planned
+
+          stale-issue-message: >
+            这条 60 天没有活动。请补齐进展、改成 frozen，或在 7 天内说明保留理由；
+            逾期按 not planned 关闭，随时可以重新打开。
+          close-issue-message: >
+            因长期没有活动按 not planned 关闭。需要继续时重新打开，并补上新的上下文。
+          stale-pr-message: >
+            这个 PR 14 天没有活动。请更新分支或写明阻塞原因；
+            7 天后关闭，代码仍在原分支上。
+          close-pr-message: >
+            因长期没有活动关闭。需要继续时重新打开，或基于原分支重开一个 PR。
+
+          operations-per-run: 100

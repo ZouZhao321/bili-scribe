@@ -1,0 +1,37 @@
+name: 重构请求
+description: 行为不变的结构调整，可独立合入、独立回滚
+labels: [kind/refactor, ready-for-agent]
+body:
+  - type: textarea
+    id: current
+    attributes:
+      label: 现状问题
+      description: 当前结构哪里不合理，依据是什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: target
+    attributes:
+      label: 目标结构
+      description: 改成什么样，模块边界在哪里
+    validations:
+      required: true
+
+  - type: textarea
+    id: unchanged
+    attributes:
+      label: 必须保持不变的行为
+      description: 对外行为、配置、数据的哪些部分不能变
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 逐条写成可执行判定
+      placeholder: |
+        - [ ] 命令：``，结果：
+    validations:
+      required: true
