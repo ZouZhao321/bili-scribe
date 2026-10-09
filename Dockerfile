@@ -21,12 +21,13 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ── Python 依赖 ──
-# 先复制依赖文件，利用 Docker 层缓存
-COPY pyproject.toml .
-RUN uv sync --frozen --no-dev
+# 先复制依赖声明，利用 Docker 层缓存；项目自身在源码复制后再安装
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 # ── 源码 ──
 COPY src/ ./src/
+RUN uv sync --frozen --no-dev
 
 # ── 输出和任务持久化目录 ──
 RUN mkdir -p /app/out /app/tasks
