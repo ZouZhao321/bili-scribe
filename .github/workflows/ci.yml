@@ -1,0 +1,116 @@
+# 代码检查与用例：PR 与推送到 main 时运行。
+# 与本地 .pre-commit 的口径一致：ruff 检查、ruff 格式检查、pytest。
+# 依赖按锁文件安装（--frozen），锁文件与 pyproject.toml 不一致时立即失败。
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    name: lint-test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # onnxruntime（faster-whisper 的依赖）只提供 cp311 起的 wheel，3.10 装不上
+        python-version: ["3.11", "3.12"]
+    env:
+      # 仓库根的 .python-version 固定 3.12，不在这里覆盖会导致矩阵退化为同一个版本
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: 安装矩阵指定的 Python
+        run: uv python install "$UV_PYTHON"
+      - name: 按锁文件安装依赖
+        run: uv sync --frozen --dev
+      - name: 确认解释器与矩阵一致
+        run: |
+          uv run --no-sync python -c "import os,sys;e=os.environ['UV_PYTHON'];a=f'{sys.version_info[0]}.{sys.version_info[1]}';assert a==e,f'matrix={e} actual={a}'"
+      - name: ruff 检查
+        run: uv run --no-sync ruff check src tests
+      - name: ruff 格式检查
+        run: uv run --no-sync ruff format --check src tests
+      - name: pytest
+        run: uv run --no-sync pytest -q
+
+  test-windows:
+    name: test-windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --dev
+      - run: uv run --no-sync pytest -q
+
+  pr-title:
+    name: pr-title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PR_TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: 校验标题格式
+        run: |
+          case "$PR_TITLE" in
+            "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*)
+              echo "合并与还原类标题跳过校验：$PR_TITLE"
+              exit 0
+              ;;
+          esac
+          if printf '%s' "$PR_TITLE" | grep -qE '^(feat|fix|refactor|test|docs|chore|perf)(\([^()]+\))?!?: [^[:space:]].*$'; then
+            echo "标题合规：$PR_TITLE"
+          else
+            echo "标题不合规：$PR_TITLE" >&2
+            echo "要求：type(scope): 描述，type 取 feat/fix/refactor/test/docs/chore/perf" >&2
+            exit 1
+          fi
+
+  deps-guard:
+    name: deps-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: 锁文件与 pyproject.toml 一致
+        run: uv lock --check
+      - name: 按锁文件安装
+        run: uv sync --frozen --dev
+      - name: 导入冒烟
+        run: uv run --no-sync python -c "import bili_scribe; import bili_scribe.web.server; print('imports ok')"
+
+  shell:
+    name: shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash 语法检查
+        run: |
+          for f in script/*.sh script/verify/*.sh; do
+            bash -n "$f" || exit 1
+          done
+      - name: shellcheck
+        run: shellcheck --severity=error script/*.sh script/verify/*.sh
+      - name: python 脚本语法检查
+        run: python3 -m compileall -q script
