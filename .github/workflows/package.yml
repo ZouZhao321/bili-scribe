@@ -1,0 +1,34 @@
+# 分发产物：构建 wheel 与 sdist，验证静态资源随包分发、命令行入口可用。
+name: package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheel:
+    name: wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: 构建 wheel 与 sdist
+        run: uv build
+      - name: 静态资源随包分发
+        run: python3 -m zipfile -l dist/*.whl | grep -q 'bili_scribe/web/static/index.html'
+      - name: 干净虚拟环境安装并验证入口
+        run: |
+          uv venv "$RUNNER_TEMP/install-check"
+          uv pip install --python "$RUNNER_TEMP/install-check" dist/*.whl
+          "$RUNNER_TEMP/install-check/bin/bili-scribe" version

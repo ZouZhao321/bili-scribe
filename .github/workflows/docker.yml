@@ -1,0 +1,61 @@
+# 镜像构建与健康冒烟：Dockerfile 是生产部署路径，相关文件变动时运行。
+# 覆盖锁文件与 pyproject.toml 不一致、静态资源缺失、依赖装不上三类问题。
+name: docker
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - src/**
+      - .github/workflows/docker.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - src/**
+      - .github/workflows/docker.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-health:
+    name: build-and-health
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: 构建镜像
+        run: docker build -t bili-scribe:ci .
+      - name: 启动容器
+        run: docker run -d --name bili-scribe-ci -p 8000:8000 bili-scribe:ci
+      - name: 等待健康端点
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8000/api/v1/health > /dev/null; then
+              echo "健康检查通过（第 ${i} 次尝试）"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "健康检查超时" >&2
+          docker logs bili-scribe-ci >&2
+          exit 1
+      - name: 容器日志
+        if: always()
+        run: docker logs bili-scribe-ci || true
+      - name: 清理容器
+        if: always()
+        run: docker rm -f bili-scribe-ci || true
