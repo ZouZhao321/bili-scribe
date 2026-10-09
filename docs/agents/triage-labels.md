@@ -1,6 +1,6 @@
 # Triage 标签
 
-本文件回答一个问题：**一条 issue 或 PR 现在该有哪些标签，由谁来打。** 它是标签名称与组合规则的唯一来源；颜色和说明不在本文件里，由 `gh label clone ZouZhao321/repo-template -R ZouZhao321/bili-scribe --force` 从模板仓库带入。
+本文件回答一个问题：**一条 issue 或 PR 现在该有哪些标签，由谁来打。** 它是标签名称与组合规则的唯一来源；颜色和说明不在本文件里，由 `gh label clone ZouZhao321/agent-assets -R ZouZhao321/bili-scribe --force` 从来源仓库带入。
 
 ## 主线
 
@@ -90,12 +90,12 @@ PR 侧只有 `kind/docs` 与 `kind/chore` 两条路径规则：`.github/workflow
 
 ## 标签来源与维护
 
-标签颜色与说明来自模板仓库 `ZouZhao321/repo-template`，本仓库用下面的命令整体带入：
+标签名称、颜色与说明以 `ZouZhao321/agent-assets` 为准，本仓库用下面的命令整体带入：
 
-    gh label clone ZouZhao321/repo-template -R ZouZhao321/bili-scribe --force
+    gh label clone ZouZhao321/agent-assets -R ZouZhao321/bili-scribe --force
 
-`--force` 会用模板里的颜色与说明覆盖同名标签；本仓库里多出来的标签不会被删掉。
+`--force` 会用来源仓库的颜色与说明覆盖同名标签；本仓库里多出来的标签不会被删掉。两处定义有冲突时以 `ZouZhao321/agent-assets` 为准，它的集合是 `ZouZhao321/repo-template` 的超集（同名标签的颜色与说明一致），另外还有 `accessibility` 与 `in-progress` 两个标签。
 
-标签改名或增删时同步改三处：本文件、`.github/ISSUE_TEMPLATE/` 里各表单的 `labels` 字段、以及模板仓库 `ZouZhao321/repo-template` 上的标签本身（`gh label edit` 改名、`gh label create` 新增），再跑一次上面的命令把颜色与说明带过来。
+标签改名或增删时同步改三处：本文件、`.github/ISSUE_TEMPLATE/` 里各表单的 `labels` 字段、以及 `ZouZhao321/agent-assets` 上的标签本身（`gh label edit` 改名、`gh label create` 新增），再跑一次上面的命令把颜色与说明带过来。
 
 只用于 issue 的标签不要贴到 PR 上；搜索时写清 `is:issue` 或 `is:pr`。
