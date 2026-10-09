@@ -62,6 +62,7 @@ class TestVideoInfoEndpoint:
         resp = api_client.get("/api/v1/video/info")
         assert resp.status_code == 422
 
+    @pytest.mark.network
     def test_known_bvid_returns_200(self, api_client: TestClient):
         """Test with a real BV ID that should exist."""
         resp = api_client.get("/api/v1/video/info", params={"url": "BV1Gm421W75K"})
@@ -112,6 +113,7 @@ class TestTranscribeEndpoint:
         assert "links" in data
         assert data["links"]["self"].startswith("/api/v1/transcribe/")
 
+    @pytest.mark.network
     def test_auto_mode_no_subtitle_returns_202(self, api_client: TestClient):
         """Video without subtitles should fall back to async."""
         resp = api_client.post(

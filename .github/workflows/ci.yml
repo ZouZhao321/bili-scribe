@@ -45,7 +45,7 @@ jobs:
       - name: ruff 格式检查
         run: uv run --no-sync ruff format --check src tests
       - name: pytest
-        run: uv run --no-sync pytest -q
+        run: uv run --no-sync pytest -q -m "not network"
 
   test-windows:
     name: test-windows
@@ -57,7 +57,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --dev
-      - run: uv run --no-sync pytest -q
+      - run: uv run --no-sync pytest -q -m "not network"
 
   pr-title:
     name: pr-title
