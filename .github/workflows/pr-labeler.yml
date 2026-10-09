@@ -1,0 +1,24 @@
+# PR 打开时按改动路径打标签，路径规则在 .github/labeler.yml。
+#
+# 用 pull_request_target 而不是 pull_request：前者在默认分支的上下文里运行，不需要
+# checkout 也能读到配置（配置不在 runner 上时 action 会走 API 从源仓库读），而且不会
+# 执行 PR 里的代码。
+#
+# sync-labels 关着，只加不摘：路径规则改了以后，已经贴错的标签要人工清掉。
+name: pr-labeler
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      # 只读改动路径，不执行 PR 里的代码
+      - uses: actions/labeler@v7
+        with:
+          sync-labels: false

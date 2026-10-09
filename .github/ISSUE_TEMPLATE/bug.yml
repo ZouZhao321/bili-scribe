@@ -1,0 +1,51 @@
+name: Bug 报告
+description: 可以复现的缺陷
+labels: [kind/bug, needs-triage]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: 现象
+      description: 实际看到什么，带上错误信息、日志或截图
+      placeholder: |
+        命令：
+        结果：
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期
+      description: 你认为应该发生什么，依据是什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 从干净环境开始的最小步骤，写清能否稳定复现
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: 系统、运行时版本、依赖版本
+      value: |
+        - 系统：
+        - 运行时：
+        - 依赖：
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 涉及范围
+      description: 会动到的模块，是否有其他入口受影响
+      placeholder: 无 / 具体描述
+    validations:
+      required: true

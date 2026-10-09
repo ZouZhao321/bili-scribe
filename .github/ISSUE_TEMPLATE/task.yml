@@ -1,0 +1,47 @@
+name: 工作切片
+description: 已明确范围、可交给一个会话独立完成的任务
+labels: [ready-for-agent]
+body:
+  - type: input
+    id: parent
+    attributes:
+      label: 上级 Issue
+      description: 来自哪个 epic 或功能请求，写编号；没有写「无」
+      placeholder: 无 / #12
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 一段话说清这一片要交付什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围
+      description: 会动到的文件与模块；明确不做哪些相邻的事
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocked-by
+    attributes:
+      label: 前置依赖
+      description: 依赖的 issue 编号，没有写「无」；也可以用原生的 blocked-by 关系挂上
+      placeholder: 无 / #12
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 逐条写成可执行判定；没有验收标准不开工
+      value: |
+        - [ ] 
+    validations:
+      required: true

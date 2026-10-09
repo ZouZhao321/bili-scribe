@@ -1,0 +1,39 @@
+name: Epic
+description: 需要多个 PR 的大功能，作为跟踪容器，不对应 PR
+labels: [kind/epic]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 整体要达成什么，为什么现在做
+    validations:
+      required: true
+
+  - type: textarea
+    id: children
+    attributes:
+      label: 切片清单
+      description: 列出各片；也可以用原生的 sub-issue 关系挂载
+      placeholder: |
+        - [ ] #12 
+        - [ ] #13 
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 整体完成判定
+      description: 满足什么条件这个 epic 可以关闭
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: 不做的部分
+      description: 明确排除的场景；没有写「无」
+      placeholder: 无
+    validations:
+      required: true

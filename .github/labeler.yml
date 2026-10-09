@@ -1,0 +1,23 @@
+# PR 按改动路径打标签。键是标签名，值是匹配规则。
+kind/docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+kind/chore:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "pyproject.toml"
+          - "uv.lock"
+          - "Dockerfile"
+          - "docker-compose.yml"
+          - ".dockerignore"
+          - ".gitignore"
+          - "script/**"
+
+# 所有 PR 先挂待评估标志，与 issue 侧一致
+needs-triage:
+  - changed-files:
+      - any-glob-to-any-file: "**"
