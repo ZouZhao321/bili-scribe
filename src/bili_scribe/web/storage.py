@@ -40,6 +40,7 @@ def _serialize_task(task: Task) -> dict:
         "mode": task.mode.value if isinstance(task.mode, TranscriptMode) else task.mode,
         "model": task.model.value if isinstance(task.model, WhisperModel) else task.model,
         "language": task.language,
+        "initial_prompt": task.initial_prompt,
         "page": task.page,
         "output_format": task.output_format.value
         if isinstance(task.output_format, OutputFormat)
@@ -110,6 +111,7 @@ def _deserialize_task(data: dict) -> Task:
         mode=data.get("mode", "auto"),
         model=data.get("model", "small"),
         language=data.get("language", "zh"),
+        initial_prompt=data.get("initial_prompt", ""),
         page=data.get("page", 0),
         output_format=data.get("output_format", "text"),
         cookie=data.get("cookie", ""),

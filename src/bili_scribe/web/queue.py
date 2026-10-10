@@ -31,6 +31,7 @@ class Task:
     mode: TranscriptMode
     model: WhisperModel
     language: str = "zh"
+    initial_prompt: str = ""
     page: int = 0
     output_format: OutputFormat = OutputFormat.text
     cookie: str = ""

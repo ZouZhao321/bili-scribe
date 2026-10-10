@@ -126,6 +126,7 @@ def process_task(task_id: str) -> None:
             task_id=task_id,
             mode=task.mode.value,
             language=task.language,
+            initial_prompt=task.initial_prompt,
             page=task.page,
             cookie=task.cookie,
         )

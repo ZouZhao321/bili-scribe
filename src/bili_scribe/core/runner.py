@@ -93,6 +93,7 @@ def run_transcription(
     language: str = "zh",
     page: int = 0,
     cookie: str = "",
+    initial_prompt: str = "",
 ) -> dict:
     """执行完整转录流程（三级降级），返回结果字典.
 
@@ -104,6 +105,7 @@ def run_transcription(
         language: Whisper 语言提示
         page: 分 P 序号（0-indexed）
         cookie: B 站登录 Cookie
+        initial_prompt: Whisper 术语提示，用于引导专有名词拼写（空串表示不使用）
 
     返回:
         {"success": True, "bv": "...", "title": "...", "author": "...",
@@ -209,7 +211,7 @@ def run_transcription(
                         )
                         video_path.unlink()  # 删除视频文件，保留音频
             if audio_path.exists():
-                result = whisper_transcribe(str(audio_path), language, model)
+                result = whisper_transcribe(str(audio_path), language, model, initial_prompt)
                 if result:
                     if mode == "both":
                         # both 模式：Whisper 结果追加到字幕后面

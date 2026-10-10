@@ -6,7 +6,12 @@
 import math
 
 
-def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = "small") -> list | None:
+def whisper_transcribe(
+    audio_path: str,
+    language: str = "zh",
+    model_size: str = "small",
+    initial_prompt: str = "",
+) -> list | None:
     """使用 faster-whisper 转录音频文件。
 
     参数：
@@ -14,6 +19,9 @@ def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = 
         language: Whisper 语言提示（如 "zh"、"en"、"ja"）。
         model_size: Whisper 模型大小 — "tiny"、"base"、"small"、
             "medium" 或 "large-v3"。
+        initial_prompt: 术语提示，用于引导专有名词拼写；空串表示不使用。
+            实测限制（见 issue #34）：只能纠正逐字专名（如「创作原则」），
+            对同音字错误（如「读者/独者」）无效，且可能让输出变长。
 
     返回：
         包含 "from"、"to"、"content"、"avg_logprob"、
@@ -30,7 +38,13 @@ def whisper_transcribe(audio_path: str, language: str = "zh", model_size: str = 
         print(f"正在加载 Whisper 模型 ({model_size}, CPU)...", file=__import__("sys").stderr)
         model = WhisperModel(model_size, device="cpu", compute_type="int8")
         print("正在转录...", file=__import__("sys").stderr)
-        segments, info = model.transcribe(audio_path, language=language, beam_size=5)
+        # 空串归一为 None —— 与 faster-whisper 的默认值一致，未传提示时行为不变
+        segments, info = model.transcribe(
+            audio_path,
+            language=language,
+            beam_size=5,
+            initial_prompt=initial_prompt or None,
+        )
         print(f"检测到语言: {info.language} (概率: {info.language_probability:.2f})", file=__import__("sys").stderr)
 
         result = []

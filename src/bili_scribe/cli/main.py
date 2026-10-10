@@ -92,6 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="B 站登录 Cookie",
     )
     p_trans.add_argument(
+        "--prompt",
+        default="",
+        help="Whisper 术语提示，引导专有名词拼写（默认: 空）",
+    )
+    p_trans.add_argument(
         "-q",
         "--quiet",
         action="store_true",
@@ -135,6 +140,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         default="",
         help="输出目录（默认: ./out/）",
+    )
+    p_batch.add_argument(
+        "--prompt",
+        default="",
+        help="Whisper 术语提示，引导专有名词拼写（默认: 空）",
     )
 
     # -- serve ----------------------------------------------------------------
@@ -194,7 +204,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     """处理 transcribe 子命令."""
 
     # 执行转录
-    result = run_transcription(args.url, args.model)
+    result = run_transcription(args.url, args.model, initial_prompt=args.prompt)
 
     if not result["success"]:
         print(result["error"], file=sys.stderr)
@@ -336,7 +346,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         print(f"   链接: https://www.bilibili.com/video/{bv}/")
 
         try:
-            result = run_transcription(bv, model=model)
+            result = run_transcription(bv, model=model, initial_prompt=args.prompt)
             if result["success"]:
                 success += 1
                 print(f"   ✅ 完成，文稿行数: {result.get('lines', 0)}")

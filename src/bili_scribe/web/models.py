@@ -101,6 +101,10 @@ class TranscribeRequest(BaseModel):
     mode: TranscriptMode = Field(default=TranscriptMode.auto, description="转录模式")
     model: WhisperModel = Field(default=WhisperModel.small, description="Whisper 模型大小")
     language: str = Field(default="zh", description="Whisper 语言提示")
+    initial_prompt: str = Field(
+        default="",
+        description="术语提示，引导专有名词拼写；对同音字无效且可能增加重复输出（见 issue #34）",
+    )
     page: int = Field(default=0, ge=0, description="分 P 序号（0-indexed）")
     output_format: OutputFormat = Field(default=OutputFormat.text, description="输出格式")
     cookie: str = Field(default="", description="B站登录 Cookie")
