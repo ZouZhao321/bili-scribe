@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 import time
@@ -233,38 +234,55 @@ def _fire_webhook(task_id: str) -> None:
 class Worker:
     """后台工作者，从队列中取出并处理任务。
 
-    在单个守护线程中运行，避免 Whisper 模型冲突。
+    支持多线程并行处理（每线程独立进程内转录，Whisper 模型各线程独立加载）。
+    示例：transcribe() 同一 TV 队列分 P 任务由多个线程并行处理。
     """
 
-    def __init__(self):
-        """初始化工作者，不启动线程。"""
-        self._thread: threading.Thread | None = None
+    def __init__(self, num_workers: int = 1, cpu_threshold: int = CPU_THRESHOLD):
+        """初始化工作者，不启动线程。
+
+        参数:
+            num_workers: 并行工作线程数（每线程独立转录）。
+            cpu_threshold: CPU 使用率阈值（%），超过时暂停取任务。
+                多线程场景可适当提高该值，避免整机 CPU 略高时所有线程空转。
+        """
+        self._num_workers = max(1, num_workers)
+        self._cpu_threshold = cpu_threshold
+        self._threads: list[threading.Thread] = []
         self._running = False
 
     def start(self) -> None:
-        """启动后台工作者线程。
+        """启动后台工作线程。
 
-        启动单个守护线程，轮询队列中的待处理任务。
+        启动 num_workers 个守护线程，轮询队列中的待处理任务。
         多次调用安全——后续调用无操作。
         """
         if self._running:
             return
         self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True, name="transcribe-worker")
-        self._thread.start()
-        print("[worker] 已启动", file=sys.stderr)
+        for i in range(self._num_workers):
+            t = threading.Thread(target=self._run, daemon=True, name=f"transcribe-worker-{i + 1}")
+            t.start()
+            self._threads.append(t)
+        print(f"[worker] 已启动 {self._num_workers} 个线程", file=sys.stderr)
 
     def stop(self) -> None:
         """通知工作者在完成当前任务后停止。
 
         将运行标志设置为 False；工作循环将在下一次迭代时退出。
+
+        参数：
+            无
+
+        返回：
+            无
         """
         self._running = False
-        print("[worker] 正在停止...", file=sys.stderr)
+        print(f"[worker] 正在停止... ({self._num_workers} 个线程)", file=sys.stderr)
 
     @property
     def is_running(self) -> bool:
-        """检查工作者线程当前是否活跃。"""
+        """检查工作者线程是否活跃。"""
         return self._running
 
     def _check_resources(self, model: str) -> tuple[bool, str]:
@@ -277,8 +295,8 @@ class Worker:
             (是否满足, 不满足原因) 元组
         """
         cpu = get_cpu_usage()
-        if cpu > CPU_THRESHOLD:
-            return False, f"CPU {cpu}% > 阈值 {CPU_THRESHOLD}%"
+        if cpu > self._cpu_threshold:
+            return False, f"CPU {cpu}% > 阈值 {self._cpu_threshold}%"
 
         mem_avail = get_available_memory_mb()
         mem_required = MODEL_MEMORY_REQUIREMENTS.get(model, 2000)
@@ -343,5 +361,8 @@ class Worker:
                 time.sleep(POLL_INTERVAL)
 
 
-# 全局单例
-worker = Worker()
+# 全局单例 — 并发数由环境变量 BILI_SCRIBE_WORKERS 控制（默认 1）
+_worker_count = int(os.environ.get("BILI_SCRIBE_WORKERS", "1") or 1)
+# 多 worker 时提升 CPU 阈值：N 个转录进程整机 CPU 必然超过默认 50%
+_cpu_threshold = CPU_THRESHOLD if _worker_count <= 1 else min(95, CPU_THRESHOLD * _worker_count)
+worker = Worker(num_workers=_worker_count, cpu_threshold=_cpu_threshold)
