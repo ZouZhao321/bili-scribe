@@ -93,6 +93,7 @@ def run_transcription(
     language: str = "zh",
     page: int = 0,
     cookie: str = "",
+    output_dir: Path | None = None,
 ) -> dict:
     """执行完整转录流程（三级降级），返回结果字典.
 
@@ -104,6 +105,7 @@ def run_transcription(
         language: Whisper 语言提示
         page: 分 P 序号（0-indexed）
         cookie: B 站登录 Cookie
+        output_dir: 产物输出根目录，None 时用模块级 OUTPUT_DIR（仓库根 out/）
 
     返回:
         {"success": True, "bv": "...", "title": "...", "author": "...",
@@ -134,7 +136,7 @@ def run_transcription(
     filename = f"{bvid}_{safe_title}"
 
     # 4. 创建视频专属目录 out/BV号_标题/
-    video_dir = OUTPUT_DIR / filename
+    video_dir = (output_dir if output_dir is not None else OUTPUT_DIR) / filename
     video_dir.mkdir(parents=True, exist_ok=True)
 
     # 5. 保存视频信息（元数据 + 热度，不含转录信息）
