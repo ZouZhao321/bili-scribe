@@ -28,6 +28,8 @@
 - **凭证管理**：本地开发默认免密（`BILI_SCRIBE_PASSWORD` 为空则 serve 跳过 auth）；生产环境通过环境变量设置密码
 - **API 调用规范**：禁止直接调用内部 API（如 `TaskStore.add()`、`queue_store` 等）。必须通过 HTTP API（`POST /api/v1/transcribe` 等）或封装后的 CLI 命令提交任务
 - **Git Worktree**：所有 git worktree 必须放在 `.worktree/` 目录下，禁止在其他位置创建。命名格式：`.worktree/<分支名>`（斜杠替换为短横线，如 `feat/docker-frontend` → `.worktree/feat-docker-frontend`）
+- **提交检查**：仓库通过 `.pre-commit-config.yaml` 挂载提交前检查（ruff 检查并自动修复、ruff 格式化、pytest、提交信息格式校验 `script/check_commit_msg.py`），换机器或重新克隆后执行 `pre-commit install` 恢复 hook；检查失败先修问题，禁止用 `--no-verify` 绕过。hook 里的 pytest 以 `uv run --no-sync` 运行，需先 `uv sync` 装好开发依赖
+- **提交信息**：标题按 `type(scope): 中文描述` 描述变更本身。不得引用审查轮次、审查方或条目数量（如「第 N 轮审核」「ocr 审核」「修复 N 项」）：这类过程记录对后续读者没有意义，并把多个逻辑变更并入一个提交。`script/check_commit_msg.py` 会拒绝这类标题
 
 ## 用户偏好（默认值）
 
@@ -81,7 +83,7 @@
 | `docs/adr/` | 架构决策记录（ADR） |
 | `docs/experiments/` | Whisper 实验记录，每个实验独立子目录 |
 | `docs/plan/` | 规划文档 |
-| `script/` | 辅助脚本：推送中转、输出迁移、作者映射 |
+| `script/` | 辅助脚本：推送中转、输出迁移、作者映射、提交信息校验 |
 | `out/` | 转录结果输出，每个视频一个子目录 `{BV号}_{标题}/` |
 | `notes/` | 卡片盒子笔记，按日期命名 |
 | `.pi/` | Pi 代理配置：settings.json、扩展、npm 包、会话记忆 |

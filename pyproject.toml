@@ -20,6 +20,7 @@ packages = [
   "bili_scribe",
   "bili_scribe.cli",
   "bili_scribe.core",
+  "bili_scribe.core.sources",
   "bili_scribe.web",
   "bili_scribe.web.routes",
 ]
