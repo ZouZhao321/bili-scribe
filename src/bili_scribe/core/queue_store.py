@@ -234,10 +234,127 @@ MODEL_MEMORY_REQUIREMENTS = {
 
 
 # ---------------------------------------------------------------------------
-# 可用内存检测
+# 容器内存检测
 # ---------------------------------------------------------------------------
+# cgroup v2 路径，cgroup v1 路径用于旧内核
+CGROUP_V2_LIMIT = "/sys/fs/cgroup/memory.max"
+CGROUP_V2_USAGE = "/sys/fs/cgroup/memory.current"
+CGROUP_V2_EVENTS = "/sys/fs/cgroup/memory.events"
+CGROUP_V1_LIMIT = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+CGROUP_V1_USAGE = "/sys/fs/cgroup/memory/memory.usage_in_bytes"
+CGROUP_V1_EVENTS = "/sys/fs/cgroup/memory/memory.oom_control"
+
+# cgroup v1 用该量级的数值表示「无限制」
+_NO_LIMIT_THRESHOLD = 1 << 60
+
+
+def _read_int_file(path: str) -> int | None:
+    """读取只包含一个整数的文件.
+
+    参数：
+        path: 文件路径.
+
+    返回：
+        文件内容对应的整数；文件不存在、内容为 cgroup v2 的 "max"
+        或无法解析时返回 None.
+    """
+    try:
+        with open(path) as f:
+            raw = f.read().strip()
+    except OSError:
+        return None
+    if raw == "max":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _read_cgroup_event(path: str, key: str) -> int | None:
+    """从 cgroup 计数文件中读取指定字段.
+
+    参数：
+        path: cgroup 计数文件路径.
+        key: 字段名称，如 "oom_kill".
+
+    返回：
+        字段数值；文件不存在、字段缺失或无法解析时返回 None.
+        读到 0 与无法读取是两种不同结果，调用方需要区分.
+    """
+    try:
+        with open(path) as f:
+            lines = f.readlines()
+    except OSError:
+        return None
+    for line in lines:
+        fields = line.split()
+        if len(fields) == 2 and fields[0] == key:
+            try:
+                return int(fields[1])
+            except ValueError:
+                return None
+    return None
+
+
+def get_cgroup_memory_limit_mb() -> int | None:
+    """读取容器 cgroup 的内存限额（MB）.
+
+    返回：
+        限额 MB；不在容器内运行或限额为「无限制」时返回 None.
+    """
+    limit_bytes = _read_int_file(CGROUP_V2_LIMIT)
+    if limit_bytes is None:
+        limit_bytes = _read_int_file(CGROUP_V1_LIMIT)
+    if limit_bytes is None or limit_bytes >= _NO_LIMIT_THRESHOLD:
+        return None
+    return limit_bytes // (1024 * 1024)
+
+
+def get_cgroup_memory_usage_mb() -> int | None:
+    """读取容器 cgroup 的当前内存用量（MB）.
+
+    返回：
+        用量 MB，无法读取时返回 None.
+    """
+    usage_bytes = _read_int_file(CGROUP_V2_USAGE)
+    if usage_bytes is None:
+        usage_bytes = _read_int_file(CGROUP_V1_USAGE)
+    if usage_bytes is None:
+        return None
+    return usage_bytes // (1024 * 1024)
+
+
+def get_oom_kill_count() -> int:
+    """读取容器 cgroup 累计记录的进程被内核 OOM 击杀次数.
+
+    计数在容器生命周期内持续累加，容器被重建后归零.
+
+    返回：
+        累计击杀次数；不在容器内运行或无法读取时返回 0.
+    """
+    count = _read_cgroup_event(CGROUP_V2_EVENTS, "oom_kill")
+    if count is not None:
+        return count
+    count = _read_cgroup_event(CGROUP_V1_EVENTS, "oom_kill")
+    return count if count is not None else 0
+
+
 def get_available_memory_mb() -> int:
-    """读取 /proc/meminfo 获取可用内存（MB）."""
+    """获取本次转录可用的内存（MB）.
+
+    在容器内以 cgroup 限额减去当前用量为准：/proc/meminfo 的 MemAvailable
+    反映的是宿主机（或虚拟机）的内存，与容器限额无关. 不在容器内运行时
+    退回 /proc/meminfo.
+
+    返回：
+        可用内存 MB.
+    """
+    limit_mb = get_cgroup_memory_limit_mb()
+    usage_mb = get_cgroup_memory_usage_mb()
+    if limit_mb is not None and usage_mb is not None:
+        return max(0, limit_mb - usage_mb)
+
     try:
         with open("/proc/meminfo") as f:
             for line in f:

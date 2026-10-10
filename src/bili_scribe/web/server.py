@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from bili_scribe.core.queue_store import get_oom_kill_count
 from bili_scribe.web.auth import BasicAuthMiddleware
 from bili_scribe.web.queue import queue
 from bili_scribe.web.routes.health import router as health_router
@@ -32,8 +33,8 @@ async def lifespan(app: FastAPI):
     生成：
         None: 在上下文管理器激活期间应用运行。
     """
-    # 从磁盘恢复任务
-    recovered = storage.recover(queue)
+    # 从磁盘恢复任务；cgroup 记录的 OOM 击杀用于丰富失败原因的描述
+    recovered = storage.recover(queue, oom_killed=get_oom_kill_count() > 0)
     print(f"[server] 从磁盘恢复 {recovered} 个任务", file=__import__("sys").stderr)
 
     worker.start()

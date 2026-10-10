@@ -35,6 +35,17 @@ segments = self.generate_segments(features, ...)                    # 30秒窗�
 
 **模型权重是内存占用的绝对大头**，音频特征占比可忽略。
 
+## 容器内存限额
+
+Docker 容器内的 `/proc/meminfo` 反映的是宿主机（或虚拟机）的内存，与容器的 cgroup 限额无关。判断容器里还能用多少内存必须读 cgroup：
+
+| cgroup 版本 | 限额 | 当前用量 | OOM 击杀计数 |
+|------------|------|---------|-------------|
+| v2 | `/sys/fs/cgroup/memory.max` | `/sys/fs/cgroup/memory.current` | `/sys/fs/cgroup/memory.events` 的 `oom_kill` |
+| v1 | `/sys/fs/cgroup/memory/memory.limit_in_bytes` | `/sys/fs/cgroup/memory/memory.usage_in_bytes` | `/sys/fs/cgroup/memory/memory.oom_control` 的 `oom_kill` |
+
+可用内存 = 限额 − 当前用量。容器内存不足时内核直接 SIGKILL 进程，进程没有机会记录失败，任务会在磁盘上停留于 `processing`，重启后由恢复逻辑接管（见 `scheduling.md` 的重做上限）。
+
 ## 卡死原因分析
 
 系统配置：3.6GB RAM，云服务器（腾讯云），运行 VS Code Server + Gitea + n8n + Docker 等

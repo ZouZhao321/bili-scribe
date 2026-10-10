@@ -97,6 +97,7 @@ async def retry_task(task_id: str):
 
     task.status = TaskStatus.pending
     task.error = None
+    task.attempts = 0
     task.progress.phase = ProgressPhase.queued
     task.progress.percent = 0
     task.progress.message = "等待处理（重试）"
