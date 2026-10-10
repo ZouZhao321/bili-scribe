@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Configuration for CodeRabbit reviews: review scope and Python code conventions.
+language: "zh-CN"
+
+reviews:
+  profile: "chill"
+
+  auto_review:
+    # The default only covers PRs targeting the default branch.
+    # ".*" matches every target branch.
+    base_branches:
+      - ".*"
+    # Draft pull requests are skipped by default.
+    drafts: true
+
+  path_instructions:
+    - path: "**/*.py"
+      instructions: |
+        - Comments and docstrings must be written in English; keep identifiers and proper nouns in their original English form.
+        - Every function and method must annotate all parameters and the return type.
+        - Docstrings must follow the Google style. Use the section headers Args:, Returns:, Raises: and Attributes:, and include only the sections that apply to the documented object.
