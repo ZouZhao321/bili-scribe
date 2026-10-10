@@ -20,6 +20,7 @@ from bili_scribe.core.queue_store import (
 
 # 导入核心转录逻辑
 from bili_scribe.core.runner import run_transcription
+from bili_scribe.core.transcriber import clear_model_cache
 from bili_scribe.web.models import (
     OutputFormat,
     ProgressPhase,
@@ -283,6 +284,11 @@ class Worker:
         mem_avail = get_available_memory_mb()
         mem_required = MODEL_MEMORY_REQUIREMENTS.get(model, 2000)
         mem_needed = int(mem_required * MEMORY_THRESHOLD)
+        # 缓存的空闲模型常驻内存。若它们把可用内存压到阀值以下，任务会因为不达标
+        # 而永不出队，也就永远不会触发新的模型加载与 LRU 淘汰，形成任务永久饥饿
+        # —— 因此内存不足时先释放缓存，（若真的释放了）再复查一次。
+        if mem_avail < mem_needed and clear_model_cache():
+            mem_avail = get_available_memory_mb()
         if mem_avail < mem_needed:
             return False, f"内存不足: 可用 {mem_avail}MB < 需要 {mem_needed}MB (模型 {model})"
 
