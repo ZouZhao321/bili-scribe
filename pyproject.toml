@@ -79,3 +79,9 @@ known-first-party = ["bili_scribe", "tests"]
 
 [dependency-groups]
 dev = ["pytest>=9.0", "httpx>=0.28", "ruff>=0.16.0"]
+
+[tool.pytest.ini_options]
+# 需要访问 B 站接口的用例；CI 中以 -m "not network" 排除
+markers = [
+  "network: 需要访问 B 站接口的用例",
+]
